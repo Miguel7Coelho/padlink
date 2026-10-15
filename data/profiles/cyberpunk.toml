@@ -1,0 +1,18 @@
+# Steam game example. Find a game's AppID with `padlink games` while it runs,
+# or from its store URL (store.steampowered.com/app/<AppID>/).
+name = "Cyberpunk 2077"
+
+[match]
+steam_appid = [1091500]
+exe = ["cyberpunk2077.exe"]
+
+[triggers]
+# Cyberpunk has native DualSense trigger support through Proton when hidraw is enabled.
+# "game" leaves the triggers to the game; switch to "override" to force your own.
+mode = "override"
+left  = { effect = "resistance",    start = 2, force = 160 }
+right = { effect = "semi_auto_gun", start = 4, force = 220 }
+
+[leds]
+color = "#fcee0a"
+player_leds = 1

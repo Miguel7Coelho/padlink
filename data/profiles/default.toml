@@ -1,0 +1,13 @@
+# Used whenever no game-specific profile matches.
+name = "Desktop"
+default = true
+
+[triggers]
+mode = "override"
+left  = "off"
+right = "off"
+
+[leds]
+color = "#3050ff"
+player_leds = "battery"   # player LEDs show the battery level (5 LEDs = 100%)
+mic_led = "off"
