@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-15
+
+First public release.
+
 ### Added
 - Controller discovery through sysfs for DualSense, DualSense Edge and DualShock 4 (USB and Bluetooth).
 - Adaptive triggers: 17 effects ported from DS4Windows, set per trigger.
@@ -26,4 +30,5 @@ follows [Semantic Versioning](https://semver.org/).
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/commits/develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...develop
+[0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0
