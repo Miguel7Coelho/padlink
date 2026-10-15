@@ -11,10 +11,20 @@ Adaptive triggers · Light bar & LEDs · Battery · Per-game profiles for Steam 
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)
 ![Platform](https://img.shields.io/badge/platform-Linux-FCC624)
+![Status](https://img.shields.io/badge/status-continuous%20improvement-orange)
+![Vibe-coded](https://img.shields.io/badge/vibe--coded-with%20Claude-8A63D2)
 
 ![padlink overview](docs/overview.png)
 
 </div>
+
+> [!NOTE]
+> **padlink is vibe-coded and in continuous improvement.**
+> It was built through AI-assisted development (Claude) and is still evolving release by release.
+> It has automated tests and runs in CI against simulated controllers, but it hasn't been verified
+> on every controller, distribution and game yet, so expect rough edges. Please
+> [report what works and what doesn't](https://github.com/Miguel7Coelho/padlink/issues/new/choose).
+> Every report helps.
 
 ---
 
@@ -265,7 +275,8 @@ Bug reports, testing on other distributions and controllers, and pull requests a
 - [x] GTK4 app and background service
 - [x] Xbox mode with rumble; the real pad sleeps while it's active
 - [x] One-command installer / uninstaller
-- [ ] Verification on more hardware (please report results!)
+- [ ] Verification on more hardware (please report results!). padlink is in continuous
+      improvement, and the roadmap moves with feedback
 - [ ] Remapping, and gyro to mouse/stick
 - [ ] DSU (Cemuhook) server for emulators
 - [ ] Battery indicator in the GNOME top bar
