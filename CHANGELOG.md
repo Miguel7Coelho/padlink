@@ -6,6 +6,13 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-15
+
+### Fixed
+- Light bar, player indicator, adaptive triggers and rumble had no effect on a DualSense connected
+  by **USB**: output reports were 48 bytes, and the controller ignores reports shorter than its full
+  63-byte size. They now match the size used by the Linux `hid-playstation` driver.
+
 ## [0.1.0] - 2026-10-15
 
 First public release.
@@ -36,5 +43,6 @@ First public release.
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...develop
+[0.1.1]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0
