@@ -1,0 +1,69 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check [TROUBLESHOOTING.md](https://github.com/Miguel7Coelho/padlink/blob/main/TROUBLESHOOTING.md) first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: controller
+    attributes:
+      label: Controller
+      options:
+        - DualSense
+        - DualSense Edge
+        - DualShock 4 v2
+        - DualShock 4 v1
+        - Other / clone
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - USB
+        - Bluetooth
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Installation
+        - Adaptive triggers
+        - Light bar / LEDs
+        - Battery
+        - Game detection / profiles
+        - Xbox mode
+        - App (GUI)
+        - Background service
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and kernel
+      placeholder: "Fedora 43, kernel 6.17.4 (output of: uname -r)"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and launcher (if relevant)
+      placeholder: "Cyberpunk 2077 via Steam / Proton 10"
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste the output of the script in [Collecting diagnostics](https://github.com/Miguel7Coelho/padlink/blob/main/TROUBLESHOOTING.md#collecting-diagnostics).
+      render: text
