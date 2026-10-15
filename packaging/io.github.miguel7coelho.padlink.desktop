@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=padlink
+Comment=DualSense and DualShock 4 triggers, lights, battery and game profiles
+Exec=padlink-gui
+Icon=input-gaming
+Terminal=false
+Categories=Game;Settings;HardwareSettings;
+Keywords=dualsense;dualshock;controller;gamepad;triggers;ps5;
