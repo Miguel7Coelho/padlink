@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "padlink"
+version = "0.1.0"
+description = "DualSense / DualShock 4 companion for Linux: adaptive triggers, LEDs, battery, per-game profiles"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+dependencies = []
+
+[project.scripts]
+padlink = "padlink.cli:main"
+
+[project.gui-scripts]
+padlink-gui = "padlink.gui.app:main"
+
+[tool.setuptools]
+packages = ["padlink", "padlink.gui"]

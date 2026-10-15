@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+install.sh text eol=lf
+packaging/padlink-hide text eol=lf
