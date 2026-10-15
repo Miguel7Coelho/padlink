@@ -20,7 +20,7 @@ def test_dualsense_usb_offsets():
     r = dualsense_report(False, rgb=(1, 2, 3), player_leds=0x04,
                          right_trigger=bytes([1, 2, 3, 4, 5, 6, 7, 8]),
                          left_trigger=bytes([9, 10, 11, 12, 13, 14, 15, 16]))
-    assert len(r) == 48 and r[0] == 0x02
+    assert len(r) == 63 and r[0] == 0x02         # full USB report, as hid-playstation sends it
     assert r[45:48] == bytes([1, 2, 3])              # DS4Windows USB: outputReport[45..47]
     assert r[44] == 0x04 | 0x20                      # player LEDs at [44]
     # DS4Windows USB: R2 at [11..17] + frequency [20]; L2 at [22..28] + frequency [31]
@@ -40,6 +40,14 @@ def test_dualsense_bt_offsets_and_crc():
     assert r[23:30] == bytes([9, 10, 11, 12, 13, 14, 15]) and r[32] == 16
     crc = zlib.crc32(b"\xA2" + r[:74]) & 0xFFFFFFFF
     assert int.from_bytes(r[74:78], "little") == crc
+
+
+def test_report_sizes_match_kernel_driver():
+    # Sizes used by Linux hid-playstation; the controllers ignore shorter output reports.
+    assert len(dualsense_report(False, rgb=(1, 2, 3))) == 63      # DS_OUTPUT_REPORT_USB_SIZE
+    assert len(dualsense_report(True, rgb=(1, 2, 3))) == 78       # DS_OUTPUT_REPORT_BT_SIZE
+    assert len(ds4_report(False, rgb=(1, 2, 3))) == 32            # DS4_OUTPUT_REPORT_USB_SIZE
+    assert len(ds4_report(True, rgb=(1, 2, 3))) == 78             # DS4_OUTPUT_REPORT_BT_SIZE
 
 
 def test_unflagged_fields_untouched():
