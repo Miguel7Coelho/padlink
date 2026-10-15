@@ -10,6 +10,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 First public release.
 
+> **Vibe-coded and in continuous improvement.** padlink was built through AI-assisted
+> development (Claude) and keeps evolving. It's covered by automated tests with simulated
+> controllers but hasn't been verified on every controller, distribution and game yet.
+> Please report what works and what doesn't:
+> https://github.com/Miguel7Coelho/padlink/issues/new/choose
+
 ### Added
 - Controller discovery through sysfs for DualSense, DualSense Edge and DualShock 4 (USB and Bluetooth).
 - Adaptive triggers: 17 effects ported from DS4Windows, set per trigger.
