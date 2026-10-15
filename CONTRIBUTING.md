@@ -76,11 +76,20 @@ that copy.
 
 ## Releasing (maintainers)
 
+Releases are published automatically: when a new version in `pyproject.toml` lands on `main`,
+the [Release workflow](.github/workflows/release.yml) runs the tests, creates the `vX.Y.Z` tag,
+builds `padlink-X.Y.Z.zip` + `SHA256SUMS` and publishes the GitHub release with notes taken from
+CHANGELOG.md.
+
 ```bash
-git switch develop && git switch -c release/0.2.0
-# bump padlink/__init__.py + pyproject.toml, move "Unreleased" in CHANGELOG.md to 0.2.0
+git switch develop && git pull && git switch -c release/0.2.0
+# bump padlink/__init__.py + pyproject.toml, move "Unreleased" in CHANGELOG.md to [0.2.0]
 git commit -am "chore(release): 0.2.0"
-git switch main && git merge --no-ff release/0.2.0 && git tag -a v0.2.0 -m "padlink 0.2.0"
+git switch main && git merge --no-ff release/0.2.0       # publishes v0.2.0
 git switch develop && git merge --no-ff release/0.2.0
-git push origin main develop v0.2.0      # the tag triggers the release workflow
+git push origin main develop && git branch -d release/0.2.0
 ```
+
+The workflow refuses to publish if the versions in `pyproject.toml`, `padlink/__init__.py` and
+CHANGELOG.md don't agree. It can also be started by pushing a `vX.Y.Z` tag, or by hand from the
+Actions tab.
