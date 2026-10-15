@@ -1,0 +1,7 @@
+# Every change needs a review from the maintainer.
+*                         @Miguel7Coelho
+
+# Root helper and installer: security-sensitive (see SECURITY.md)
+/packaging/padlink-hide   @Miguel7Coelho
+/install.sh               @Miguel7Coelho
+/.github/                 @Miguel7Coelho

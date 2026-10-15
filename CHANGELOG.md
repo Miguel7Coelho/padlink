@@ -6,6 +6,9 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
+
 ## [0.1.0] - 2026-10-15
 
 First public release.
