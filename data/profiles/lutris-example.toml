@@ -1,0 +1,16 @@
+# Lutris game example. Use the game title exactly as Lutris shows it
+# (`padlink games` prints the detected title while the game runs).
+name = "Racing"
+
+[match]
+lutris = ["Need for Speed: Most Wanted"]
+exe = ["speed.exe"]
+
+[triggers]
+mode = "override"
+left  = { effect = "resistance", start = 0, force = 200 }   # brake: firm from the start
+right = { effect = "vibrate",    start = 3, force = 120 }   # throttle: engine buzz
+
+[leds]
+color = "#ff3b00"
+player_leds = "battery"
