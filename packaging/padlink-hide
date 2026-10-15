@@ -1,0 +1,120 @@
+#!/usr/bin/python3 -I
+"""padlink-hide: hide / restore a PlayStation controller's device nodes (runs as root via sudo).
+
+  padlink-hide hide hidraw3 event21 event22 js0    -> games can no longer open these nodes
+  padlink-hide show hidraw3 event21 event22 js0    -> restore original mode + logged-in user's ACL
+  padlink-hide show-all                            -> restore everything hidden so far (crash recovery)
+
+Safety: only accepts plain node names (hidrawN / eventN / jsN) whose sysfs device belongs to a Sony
+DualShock 4 / DualSense (VID 054C). It changes permissions only, never deletes anything.
+Installed by install.sh to /usr/local/libexec/padlink-hide, with a sudoers rule so padlink can run it
+without a password.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+NODE_RE = re.compile(r"^(hidraw|event|js)\d{1,4}$")
+SONY_HID_RE = re.compile(r"^[0-9A-Fa-f]{4}:054C:(05C4|09CC|0BA0|0CE6|0DF2)\.[0-9A-Fa-f]{4}$", re.I)
+
+# Tests can point these elsewhere, but only when not running as root.
+_override = os.geteuid() != 0
+SYS = Path(os.environ.get("PADLINK_SYSFS", "/sys") if _override else "/sys")
+DEV = Path(os.environ.get("PADLINK_DEV", "/dev") if _override else "/dev")
+STATE = Path(os.environ.get("PADLINK_STATE", "/run/padlink/hidden.json") if _override else "/run/padlink/hidden.json")
+
+
+def sys_dir(node: str) -> Path:
+    cls = "hidraw" if node.startswith("hidraw") else "input"
+    return SYS / "class" / cls / node
+
+
+def dev_path(node: str) -> Path:
+    return DEV / node if node.startswith("hidraw") else DEV / "input" / node
+
+
+def is_sony_controller(node: str) -> bool:
+    if not NODE_RE.match(node):
+        return False
+    try:
+        real = sys_dir(node).resolve(strict=True)
+    except OSError:
+        return False
+    return any(SONY_HID_RE.match(p.name) for p in [real, *real.parents])
+
+
+def load_state() -> dict:
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state))
+    os.chmod(tmp, 0o600)
+    tmp.replace(STATE)
+
+
+def run(*cmd) -> None:
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    except OSError:
+        pass
+
+
+def hide(nodes: list[str]) -> int:
+    state = load_state()
+    rc = 0
+    for n in nodes:
+        if not is_sony_controller(n):
+            print(f"padlink-hide: refusing {n!r} (not a Sony controller node)", file=sys.stderr)
+            rc = 2
+            continue
+        p = dev_path(n)
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        state.setdefault(str(p), st.st_mode & 0o7777)
+        run("setfacl", "-b", str(p))        # drop the logged-in user's uaccess ACL
+        os.chmod(p, 0o600)                  # root only; padlink's already-open fds keep working
+    save_state(state)
+    return rc
+
+
+def show(nodes: list[str] | None) -> int:
+    state = load_state()
+    requested = list(state) if nodes is None else [str(dev_path(n)) for n in nodes if NODE_RE.match(n)]
+    paths = [p for p in requested if p in state]      # only ever restore what we hid
+    for path in paths:
+        mode = state.pop(path)
+        p = Path(path)
+        if not p.exists():
+            continue                                  # controller unplugged; udev recreates it fresh
+        os.chmod(p, mode)
+        # re-run udev rules for the node so the uaccess ACL for the logged-in user comes back
+        run("udevadm", "trigger", "--action=change", f"--name-match={path}")
+    run("udevadm", "settle", "--timeout=3")
+    save_state(state)
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 1 or argv[0] not in ("hide", "show", "show-all"):
+        print(__doc__, file=sys.stderr)
+        return 1
+    if argv[0] == "hide":
+        return hide(argv[1:])
+    if argv[0] == "show":
+        return show(argv[1:])
+    return show(None)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
