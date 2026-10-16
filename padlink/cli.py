@@ -10,6 +10,7 @@
   padlink apply cyberpunk              apply a profile by file name
   padlink effects                      list trigger effects
   padlink gui                          open the graphical app
+  padlink off                          turn the controller off (Bluetooth only)
   padlink xbox                         Xbox 360 mode now (real pad hidden) until Ctrl+C
   padlink daemon -v                    run the background service
 """
@@ -20,7 +21,7 @@ import sys
 
 from .battery import read_battery
 from .control import apply, resolve_player_leds
-from .devices import Controller, conflict_hint, find_controllers, other_users
+from .devices import Controller, conflict_hint, find_controllers, other_users, power_off
 from .games import detect_games
 from .profiles import PROFILE_DIR, load_profiles, parse_color, pick_profile
 from .triggers import EFFECTS, TriggerSetting
@@ -149,6 +150,16 @@ def cmd_xbox(args) -> None:
         write_state([])
 
 
+def cmd_off(args) -> None:
+    ok_all = True
+    for c in _controllers(args):
+        ok, msg = power_off(c)
+        print(msg if ok else f"{c.model}: {msg}")
+        ok_all &= ok
+    if not ok_all:
+        sys.exit(1)
+
+
 def cmd_gui(args) -> None:
     try:
         from .gui.app import main as gui_main
@@ -191,6 +202,7 @@ def main(argv=None) -> None:
     a.set_defaults(fn=cmd_apply)
 
     sub.add_parser("gui").set_defaults(fn=cmd_gui)
+    sub.add_parser("off", help="turn the controller off (Bluetooth)").set_defaults(fn=cmd_off)
     sub.add_parser("xbox", help="Xbox 360 mode until Ctrl+C").set_defaults(fn=cmd_xbox)
 
     d = sub.add_parser("daemon")

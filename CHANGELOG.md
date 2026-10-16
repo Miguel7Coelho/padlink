@@ -6,6 +6,29 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
+### Added
+- Turn the controller off from the app (⏻ button in the header) or with `padlink off`. Works over
+  Bluetooth: padlink drops the connection through BlueZ and the controller powers down; press PS to
+  turn it on again. Over USB the button is disabled, since the cable keeps the controller powered.
+- The Controller tab shows when Xbox mode is on: a banner, and the Xbox names (A/B/X/Y, LB/RB,
+  LT/RT, Back/Start/Guide) drawn on the controller.
+
+### Fixed
+- Switching on "Show as an Xbox 360 controller" in the profile editor did nothing until the
+  profile's game was running. With "Preview on controller" on, the previewed profile's Xbox switch
+  now turns Xbox mode on and off right away (through the background service).
+- Xbox mode failed with "Permission denied: /dev/input/eventN": the controller's motion sensor and
+  touch pad nodes are root-only by default. The udev rule now gives the logged-in user access to all
+  of the controller's input nodes (run `install.sh` again), and Xbox mode no longer fails if one of
+  those extra nodes can't be grabbed.
+- When Xbox mode couldn't start, the background service retried and showed the same error
+  notification every 2 seconds. It now notifies once per error and retries every 30 seconds, and
+  the notification is no longer "critical" (GNOME keeps those on screen until each one is closed).
+- The app kept sending the light bar and triggers of the previewed profile while Xbox mode was on
+  (it opens the controller before Xbox mode hides it).
+
 ## [0.2.0] - 2026-10-15
 
 ### Added
@@ -80,7 +103,8 @@ First public release.
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.2.0...develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.3.0...develop
+[0.3.0]: https://github.com/Miguel7Coelho/padlink/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0

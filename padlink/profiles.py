@@ -180,10 +180,11 @@ PREVIEW_LOCK = CONFIG_DIR / ".preview"
 PREVIEW_TTL = 6.0
 
 
-def touch_preview_lock() -> None:
+def touch_preview_lock(xbox: bool = False) -> None:
+    """Keep the preview going; `xbox` asks the background service to run Xbox mode meanwhile."""
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        PREVIEW_LOCK.touch()
+        PREVIEW_LOCK.write_text("xbox\n" if xbox else "")
     except OSError:
         pass
 
@@ -194,6 +195,14 @@ def clear_preview_lock() -> None:
         PREVIEW_LOCK.unlink()
     except OSError:
         pass
+
+
+def preview_wants_xbox() -> bool:
+    """The previewed profile has Xbox mode on (only meaningful while preview_active())."""
+    try:
+        return PREVIEW_LOCK.read_text().strip() == "xbox"
+    except OSError:
+        return False
 
 
 def preview_active() -> bool:

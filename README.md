@@ -142,7 +142,7 @@ Open **padlink** from the app grid, or run `padlink gui`.
 
 | Page | What it does |
 |---|---|
-| **Controller** | Live drawing of the pad: buttons, sticks, L2/R2 pressure, touch points, gyro and accelerometer, battery |
+| **Controller** | Live drawing of the pad: buttons, sticks, L2/R2 pressure, touch points, gyro and accelerometer, battery. The ⏻ button in the header turns a Bluetooth controller off |
 | **Profiles** | Game matching, Xbox mode, both adaptive triggers, light bar, player indicator, Mute light; changes preview on the controller as you edit |
 | **Service** | Start/stop the background service, start at login, the detected game and active profile, permission check |
 
@@ -163,6 +163,7 @@ padlink player battery                         player indicator: 1-4 | battery |
 padlink apply cyberpunk                        apply a profile by file name
 padlink effects                                list trigger effects
 padlink xbox                                   Xbox mode now, until Ctrl+C
+padlink off                                    turn the controller off (Bluetooth)
 padlink gui                                    open the app
 padlink daemon -v                              run the background service in the foreground
 ```
@@ -236,6 +237,12 @@ exposes. Xbox mode makes that controller an Xbox 360 pad:
 4. When Xbox mode ends (the profile switches off, padlink stops or the controller disconnects), the
    virtual pad is removed and the original permissions are restored. If padlink crashes, the
    service restores them when it stops and again on its next start.
+
+To try it without starting the game, open the profile in the app with **Preview on controller**
+on and switch on **Show as an Xbox 360 controller**: the background service starts Xbox mode within
+a couple of seconds, and the Controller tab shows a banner plus the Xbox names (A/B/X/Y, LB/RB,
+LT/RT, Back/Start/Guide) on the drawing. Test it at
+[controllertest.org/xinput](https://controllertest.org/xinput) or `evtest`.
 
 Square and Triangle are swapped on the way: the kernel reports them positionally, while the `xpad`
 layout that games expect puts Xbox **X** on `BTN_X` and **Y** on `BTN_Y`.

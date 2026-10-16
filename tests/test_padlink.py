@@ -361,6 +361,72 @@ def test_daemon_toggles_xbox_mode_with_profile(tmp_path, monkeypatch):
     assert events[-1] == ("state", ())
 
 
+def test_xbox_failure_notifies_once_and_backs_off(tmp_path, monkeypatch):
+    from padlink import daemon as D
+    from padlink.devices import Controller, BUS_BT
+    starts, notes = [], []
+
+    class FailingBridge:
+        def __init__(self, ctrl, write, log=None):
+            self.warning = None
+        def start(self):
+            starts.append(1)
+            raise PermissionError("[Errno 13] Permission denied: '/dev/input/event22'")
+        def stop(self): pass
+
+    class W:
+        def write(self, b): pass
+        def close(self): pass
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(D, "XboxBridge", FailingBridge)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "notify", lambda *a, **k: notes.append(a))
+    monkeypatch.setattr(D.time, "monotonic", lambda: clock["t"])
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw3", bus=BUS_BT, pid=0x0CE6)
+    game = Profile(name="Game", xbox_mode=True)
+    for _ in range(10):                         # 20 s of daemon steps
+        d._sync_xbox([c], game)
+        clock["t"] += 2
+    assert len(starts) == 1 and len(notes) == 1
+    clock["t"] += 30
+    d._sync_xbox([c], game)                     # retried later, same error: no new notification
+    assert len(starts) == 2 and len(notes) == 1
+
+
+def test_preview_xbox_switch_drives_xbox_mode(tmp_path, monkeypatch):
+    """The app's preview decides Xbox mode, so it can be tried without starting the game."""
+    from padlink import daemon as D
+    from padlink import profiles as P
+    from padlink.devices import Controller, BUS_USB
+    lock = tmp_path / ".preview"
+    monkeypatch.setattr(P, "PREVIEW_LOCK", lock)
+    monkeypatch.setattr(P, "CONFIG_DIR", tmp_path)
+    P.touch_preview_lock(xbox=True)
+    assert P.preview_active() and P.preview_wants_xbox()
+    P.touch_preview_lock(xbox=False)
+    assert P.preview_active() and not P.preview_wants_xbox()
+
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw3", bus=BUS_USB, pid=0x0CE6)
+    wants = []
+    monkeypatch.setattr(D, "load_profiles", lambda: [Profile(name="Desktop", is_default=True)])
+    monkeypatch.setattr(D, "find_controllers", lambda: [c])
+    monkeypatch.setattr(D, "detect_games", lambda: [])
+    monkeypatch.setattr(D, "preview_active", lambda: True)
+    monkeypatch.setattr(D, "preview_wants_xbox", lambda: True)
+    monkeypatch.setattr(D, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(D, "other_users", lambda h: [])
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_sync_xbox", lambda ctrls, prof: wants.append(prof.xbox_mode))
+    monkeypatch.setattr(d, "_battery", lambda ctrl: __import__("padlink.battery").battery.BatteryInfo(50, "Discharging"))
+    d.step()
+    monkeypatch.setattr(D, "preview_active", lambda: False)
+    d.step()                                   # preview over: the Desktop profile (no Xbox) decides
+    assert wants == [True, False]
+
+
 # ---------- other programs holding the controller ----------
 
 def test_other_users_finds_wine_and_skips_padlink(tmp_path):
@@ -506,3 +572,40 @@ def test_low_battery_settings(tmp_path, monkeypatch):
     d2.step()
     assert all(_rgb(r) != (255, 0, 0) for r in sent2)        # light bar left alone
     assert [n[0].split()[-1] for n in notes2] == ["critical"]  # 9% is already critical: one urgent notice
+
+
+# ---------- turning the controller off ----------
+
+def test_power_off(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from padlink import devices as Dv
+    from padlink.devices import Controller, BUS_BT, BUS_USB, power_off
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="Attempting to disconnect from D4:2F:4B:05:14:DD\nSuccessful disconnected\n", stderr="")
+
+    bt = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6, uniq="d4:2f:4b:05:14:dd")
+    usb = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_USB, pid=0x0CE6, uniq="")
+
+    monkeypatch.setattr(Dv.shutil, "which", lambda name: "/usr/bin/" + name if name == "bluetoothctl" else None)
+    ok, msg = power_off(bt, run=fake_run)
+    assert ok and "turned off" in msg and calls[-1] == ["bluetoothctl", "disconnect", "d4:2f:4b:05:14:dd"]
+
+    ok, msg = power_off(usb, run=fake_run)
+    assert not ok and "Bluetooth" in msg
+
+    bad = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6, uniq="d4:2f; rm -rf /")
+    n = len(calls)
+    ok, msg = power_off(bad, run=fake_run)
+    assert not ok and len(calls) == n            # never reaches a command
+
+    fail = lambda cmd, **kw: SimpleNamespace(returncode=1, stdout="Failed to disconnect: org.bluez.Error.NotConnected", stderr="")
+    ok, msg = power_off(bt, run=fail)
+    assert not ok and "NotConnected" in msg
+
+    # D-Bus fallback when bluetoothctl is missing
+    monkeypatch.setattr(Dv.shutil, "which", lambda name: "/usr/bin/busctl" if name == "busctl" else None)
+    ok, msg = power_off(bt, run=fake_run)
+    assert ok and calls[-1][:3] == ["busctl", "call", "org.bluez"] and calls[-1][3] == "/org/bluez/hci0/dev_D4_2F_4B_05_14_DD"

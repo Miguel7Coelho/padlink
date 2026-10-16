@@ -211,11 +211,24 @@ class XboxBridge:
         if not nodes["gamepad"]:
             raise RuntimeError(f"no gamepad input node for {self.ctrl}")
         # 1. open + grab every input node of the controller (we keep reading the gamepad one)
-        for path in nodes["gamepad"] + nodes["other"]:
-            d = evdev.InputDevice(path)
-            d.grab()
+        try:
+            self.pad = evdev.InputDevice(nodes["gamepad"][0])
+        except PermissionError as e:
+            raise PermissionError(f"{e.strerror}: {e.filename}. Run install.sh again (it adds the "
+                                  "access rule), then reconnect the controller.") from None
+        self.pad.grab()
+        self._devices.append(self.pad)
+        skipped = []
+        for path in nodes["gamepad"][1:] + nodes["other"]:
+            try:                  # motion sensors / touch pad: nice to grab, not essential
+                d = evdev.InputDevice(path)
+                d.grab()
+            except OSError:
+                skipped.append(path)
+                continue
             self._devices.append(d)
-        self.pad = self._devices[0]
+        if skipped:
+            self.log(f"couldn't grab {', '.join(skipped)} (run install.sh again); hiding them instead")
 
         # 2. the virtual Xbox 360 pad
         stick = AbsInfo(0, -32768, 32767, 16, 128, 0)

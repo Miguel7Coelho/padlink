@@ -48,6 +48,14 @@ R_FACE = {"triangle": (1245, 320), "circle": (1321, 393), "square": (1170, 394),
 R_STICKS = {"l3": (635, 545), "r3": (1032, 545)}
 R_PS = (832, 465)
 
+# Xbox mode: what each control is called on the virtual Xbox 360 pad
+XBOX_FACE = {            # PlayStation button -> (Xbox letter, Xbox colour)
+    "cross": ("A", (0.42, 0.75, 0.27)),
+    "circle": ("B", (0.89, 0.26, 0.24)),
+    "square": ("X", (0.20, 0.52, 0.92)),
+    "triangle": ("Y", (0.96, 0.75, 0.15)),
+}
+
 
 def _mix(a, b, t):
     return tuple(x + (y - x) * t for x, y in zip(a, b))
@@ -60,6 +68,7 @@ class PadView(Gtk.DrawingArea):
         self.lightbar = (0.19, 0.31, 1.0)
         self.player_mask = 0
         self.is_dualsense = True
+        self.xbox = False          # Xbox mode on: show the Xbox 360 names on top
         self._body = self._load(BODY_PNG)
         self._labels = self._load(LABELS_PNG)
         w, h = (self._body.get_width(), self._body.get_height()) if self._body else (1442, 878)
@@ -162,6 +171,8 @@ class PadView(Gtk.DrawingArea):
         self._draw_ps(cr, p)
         if self.is_dualsense:
             self._draw_mute(cr, p)
+        if self.xbox:
+            self._draw_xbox_names(cr)
 
     def _draw_triggers(self, cr, fg, s):
         pw, ph = R_PILL
@@ -182,7 +193,8 @@ class PadView(Gtk.DrawingArea):
                 cr.set_source_rgba(*ACCENT, 0.95)
                 cr.fill()
                 cr.restore()
-            self._text(cr, f"{name.upper()}  {val}", cx, cy, 26, (*fg, 0.95), bold=False)
+            label = {"l2": "LT", "r2": "RT"}[name] if self.xbox else name.upper()
+            self._text(cr, f"{label}  {val}", cx, cy, 26, (*fg, 0.95), bold=False)
 
     def _draw_lightbar(self, cr, s, p):
         tx, ty, tw, th = R_TOUCH
@@ -327,3 +339,39 @@ class PadView(Gtk.DrawingArea):
             cr.set_line_width(3)
             cr.stroke()
         self._text(cr, "PS", px, py, 18, (1, 1, 1, 0.9))
+
+    def _tag(self, cr, text, x, y, size=19):
+        """A small Xbox-green tag with the Xbox name of a control."""
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(size)
+        w = cr.text_extents(text).width + size
+        h = size * 1.6
+        self._rrect(cr, x - w / 2, y - h / 2, w, h, h / 2)
+        cr.set_source_rgba(0.06, 0.49, 0.06, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1, 1, 1, 0.85)
+        cr.set_line_width(1.5)
+        cr.stroke()
+        self._text(cr, text, x, y, size, (1, 1, 1, 1))
+
+    def _draw_xbox_names(self, cr):
+        # face buttons: the Xbox letter as a coloured badge just outside each button
+        fx = sum(x for x, _ in R_FACE.values()) / 4
+        fy = sum(y for _, y in R_FACE.values()) / 4
+        for name, (cx, cy) in R_FACE.items():
+            letter, colour = XBOX_FACE[name]
+            d = math.hypot(cx - fx, cy - fy) or 1
+            bx, by = cx + (cx - fx) / d * 30 + 24, cy + (cy - fy) / d * 30 - 24
+            cr.new_path()
+            cr.arc(bx, by, 17, 0, 2 * math.pi)
+            cr.set_source_rgba(*colour, 1)
+            cr.fill_preserve()
+            cr.set_source_rgba(0, 0, 0, 0.6)
+            cr.set_line_width(2)
+            cr.stroke()
+            self._text(cr, letter, bx, by, 21, (1, 1, 1, 1))
+        self._tag(cr, "LB", R_BUMPER["l1"][0] - 80, R_BUMPER["l1"][1] + 4)
+        self._tag(cr, "RB", R_BUMPER["r1"][0] + 80, R_BUMPER["r1"][1] + 4)
+        self._tag(cr, "Back", R_SMALL["create"][0], R_SMALL["create"][1] + 58, 16)
+        self._tag(cr, "Start", R_SMALL["options"][0], R_SMALL["options"][1] + 58, 16)
+        self._tag(cr, "Guide", R_PS[0] - 78, R_PS[1], 16)

@@ -15,7 +15,7 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 from ..battery import read_battery  # noqa: E402
 from ..settings import load_battery_settings  # noqa: E402
 from ..control import apply, resolve_player_leds  # noqa: E402
-from ..devices import Controller, HidrawWriter, find_controllers  # noqa: E402
+from ..devices import Controller, HidrawWriter, find_controllers, power_off  # noqa: E402
 from ..inputs import BUTTON_NAMES, InputReader  # noqa: E402
 from ..profiles import Profile, clear_preview_lock  # noqa: E402
 from ..xinput import xbox_mode_active  # noqa: E402
@@ -62,14 +62,21 @@ class MainWindow(Adw.ApplicationWindow):
         bbox.append(self.batt_icon)
         bbox.append(self.batt_label)
         header.pack_end(bbox)
+        self.off_btn = Gtk.Button(icon_name="system-shutdown-symbolic", visible=False)
+        self.off_btn.add_css_class("flat")
+        self.off_btn.connect("clicked", self._power_off)
+        header.pack_end(self.off_btn)
 
         # Controller page
         self.pad = PadView()
         self.readout = Gtk.Label(xalign=0, wrap=True)
         self.readout.add_css_class("monospace")
         self.readout.add_css_class("dim-label")
+        self.xbox_banner = Adw.Banner(title="Xbox 360 mode is on: games see an Xbox controller, "
+                                            "and the DualSense is hidden from them")
         live = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                        margin_top=12, margin_bottom=18, margin_start=18, margin_end=18)
+        live.append(self.xbox_banner)
         live.append(self.pad)
         live.append(self.readout)
         self.empty = Adw.StatusPage(icon_name="input-gaming-symbolic", title="Connect your controller",
@@ -103,6 +110,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._scan()
         GLib.timeout_add_seconds(2, self._scan)
         GLib.timeout_add(33, self._frame)
+        GLib.timeout_add(500, self._update_xbox)
 
     # ---------- controllers ----------
     def _scan(self):
@@ -134,6 +142,10 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self.pad.is_dualsense = ctrl.is_dualsense
         self.reader = InputReader(ctrl.hidraw, ctrl.is_dualsense).start()
+        try:        # open now: once Xbox mode hides the controller, it can't be opened any more
+            self.writer = HidrawWriter(ctrl.hidraw)
+        except OSError:
+            self.writer = None
         self.ctrl_stack.set_visible_child_name("live")
         self.profiles_page.on_shown()
 
@@ -146,7 +158,21 @@ class MainWindow(Adw.ApplicationWindow):
         self.ctrl_stack.set_visible_child_name("live")
         return GLib.SOURCE_REMOVE
 
+    def _update_xbox(self):
+        on = self.ctrl is not None and self.ctrl.hidraw in xbox_mode_active()
+        if on != self.pad.xbox:
+            self.pad.xbox = on
+            self.pad.queue_draw()
+        self.xbox_banner.set_revealed(on)
+        return GLib.SOURCE_CONTINUE
+
     def _update_battery(self):
+        self.off_btn.set_visible(self.ctrl is not None)
+        if self.ctrl is not None:
+            bt = self.ctrl.is_bluetooth
+            self.off_btn.set_sensitive(bt)
+            self.off_btn.set_tooltip_text(f"Turn off the {self.ctrl.model}" if bt else
+                                          "Turning off only works over Bluetooth (USB keeps the controller powered)")
         if self.ctrl is None:
             self.batt_label.set_label("")
             self.batt_icon.set_visible(False)
@@ -208,8 +234,8 @@ class MainWindow(Adw.ApplicationWindow):
         mask = self.mirror_profile(p)
         if self.ctrl is None:
             return
-        if self.ctrl.hidraw in xbox_mode_active():
-            return      # the pad is asleep in Xbox mode; nothing can be written to it from here
+        if self.writer is None and self.ctrl.hidraw in xbox_mode_active():
+            return      # hidden from programs in Xbox mode and not opened before; can't write now
         try:
             if self.writer is None:
                 self.writer = HidrawWriter(self.ctrl.hidraw)
@@ -221,6 +247,14 @@ class MainWindow(Adw.ApplicationWindow):
         except OSError as e:
             self.toast(f"Controller write failed: {e}")
             self.writer = None
+
+    def _power_off(self, *_):
+        if self.ctrl is None:
+            return
+        ok, msg = power_off(self.ctrl)
+        self.toast(msg)
+        if ok:
+            GLib.timeout_add_seconds(1, lambda: (self._scan(), False)[1])
 
     def toast(self, text: str):
         self.toasts.add_toast(Adw.Toast(title=GLib.markup_escape_text(text), timeout=3))
