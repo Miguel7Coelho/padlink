@@ -142,7 +142,7 @@ Open **padlink** from the app grid, or run `padlink gui`.
 
 | Page | What it does |
 |---|---|
-| **Controller** | Live drawing of the pad: buttons, sticks, L2/R2 pressure, touch points, gyro and accelerometer, battery |
+| **Controller** | Live drawing of the pad: buttons, sticks, L2/R2 pressure, touch points, gyro and accelerometer, battery. The ⏻ button in the header turns a Bluetooth controller off |
 | **Profiles** | Game matching, Xbox mode, both adaptive triggers, light bar, player indicator, Mute light; changes preview on the controller as you edit |
 | **Service** | Start/stop the background service, start at login, the detected game and active profile, permission check |
 
@@ -163,6 +163,7 @@ padlink player battery                         player indicator: 1-4 | battery |
 padlink apply cyberpunk                        apply a profile by file name
 padlink effects                                list trigger effects
 padlink xbox                                   Xbox mode now, until Ctrl+C
+padlink off                                    turn the controller off (Bluetooth)
 padlink gui                                    open the app
 padlink daemon -v                              run the background service in the foreground
 ```

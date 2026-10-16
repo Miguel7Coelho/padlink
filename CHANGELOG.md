@@ -6,6 +6,11 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Turn the controller off from the app (⏻ button in the header) or with `padlink off`. Works over
+  Bluetooth: padlink drops the connection through BlueZ and the controller powers down; press PS to
+  turn it on again. Over USB the button is disabled, since the cable keeps the controller powered.
+
 ## [0.2.0] - 2026-10-15
 
 ### Added
