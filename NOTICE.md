@@ -15,8 +15,8 @@ event conventions; no code is copied.
 
 ## Artwork
 
-`padlink/gui/assets/controller-realistic.png` (the "Realistic" controller view) was provided by the
-project owner, Miguel Augusto Coelho Pinto, for padlink.
+The controller artwork (`art/controller-realistic-source.png`, and the images built from it in
+`padlink/gui/assets/`) was provided by the project owner, Miguel Augusto Coelho Pinto, for padlink.
 
 ## Trademarks
 
