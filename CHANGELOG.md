@@ -17,9 +17,10 @@ follows [Semantic Versioning](https://semver.org/).
 - Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
 
 ### Changed
-- Redesigned controller view: shaded single-tone shell with depth, one-piece D-pad, recessed
-  stick wells, and a glow around the touch pad in the current light bar colour; adapts to the
-  light and dark themes.
+- Redesigned controller view with two styles, switchable on the Controller page and remembered:
+  **Outline** (default: flat, bold lines, round pads around the D-pad and action buttons, ringed
+  sticks) and **Shaded** (single-tone shell with depth and recessed sticks). In both, the touch pad
+  is outlined in the current light bar colour; both adapt to the light and dark themes.
 - Low-battery notification now comes below 25% (was at 20%); thresholds are configurable.
 
 ## [0.1.1] - 2026-10-15
