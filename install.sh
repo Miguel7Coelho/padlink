@@ -165,6 +165,7 @@ install_system() {
 
   try "${SUDO[@]}" udevadm control --reload
   try "${SUDO[@]}" udevadm trigger --subsystem-match=hidraw --action=change
+  try "${SUDO[@]}" udevadm trigger --subsystem-match=input --action=change
   try "${SUDO[@]}" udevadm trigger --subsystem-match=misc --sysname-match=uinput --action=change
   try "${SUDO[@]}" udevadm settle --timeout=5
 }

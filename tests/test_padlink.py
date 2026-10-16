@@ -361,6 +361,72 @@ def test_daemon_toggles_xbox_mode_with_profile(tmp_path, monkeypatch):
     assert events[-1] == ("state", ())
 
 
+def test_xbox_failure_notifies_once_and_backs_off(tmp_path, monkeypatch):
+    from padlink import daemon as D
+    from padlink.devices import Controller, BUS_BT
+    starts, notes = [], []
+
+    class FailingBridge:
+        def __init__(self, ctrl, write, log=None):
+            self.warning = None
+        def start(self):
+            starts.append(1)
+            raise PermissionError("[Errno 13] Permission denied: '/dev/input/event22'")
+        def stop(self): pass
+
+    class W:
+        def write(self, b): pass
+        def close(self): pass
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(D, "XboxBridge", FailingBridge)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "notify", lambda *a, **k: notes.append(a))
+    monkeypatch.setattr(D.time, "monotonic", lambda: clock["t"])
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw3", bus=BUS_BT, pid=0x0CE6)
+    game = Profile(name="Game", xbox_mode=True)
+    for _ in range(10):                         # 20 s of daemon steps
+        d._sync_xbox([c], game)
+        clock["t"] += 2
+    assert len(starts) == 1 and len(notes) == 1
+    clock["t"] += 30
+    d._sync_xbox([c], game)                     # retried later, same error: no new notification
+    assert len(starts) == 2 and len(notes) == 1
+
+
+def test_preview_xbox_switch_drives_xbox_mode(tmp_path, monkeypatch):
+    """The app's preview decides Xbox mode, so it can be tried without starting the game."""
+    from padlink import daemon as D
+    from padlink import profiles as P
+    from padlink.devices import Controller, BUS_USB
+    lock = tmp_path / ".preview"
+    monkeypatch.setattr(P, "PREVIEW_LOCK", lock)
+    monkeypatch.setattr(P, "CONFIG_DIR", tmp_path)
+    P.touch_preview_lock(xbox=True)
+    assert P.preview_active() and P.preview_wants_xbox()
+    P.touch_preview_lock(xbox=False)
+    assert P.preview_active() and not P.preview_wants_xbox()
+
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw3", bus=BUS_USB, pid=0x0CE6)
+    wants = []
+    monkeypatch.setattr(D, "load_profiles", lambda: [Profile(name="Desktop", is_default=True)])
+    monkeypatch.setattr(D, "find_controllers", lambda: [c])
+    monkeypatch.setattr(D, "detect_games", lambda: [])
+    monkeypatch.setattr(D, "preview_active", lambda: True)
+    monkeypatch.setattr(D, "preview_wants_xbox", lambda: True)
+    monkeypatch.setattr(D, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(D, "other_users", lambda h: [])
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_sync_xbox", lambda ctrls, prof: wants.append(prof.xbox_mode))
+    monkeypatch.setattr(d, "_battery", lambda ctrl: __import__("padlink.battery").battery.BatteryInfo(50, "Discharging"))
+    d.step()
+    monkeypatch.setattr(D, "preview_active", lambda: False)
+    d.step()                                   # preview over: the Desktop profile (no Xbox) decides
+    assert wants == [True, False]
+
+
 # ---------- other programs holding the controller ----------
 
 def test_other_users_finds_wine_and_skips_padlink(tmp_path):

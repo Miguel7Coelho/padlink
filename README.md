@@ -238,6 +238,12 @@ exposes. Xbox mode makes that controller an Xbox 360 pad:
    virtual pad is removed and the original permissions are restored. If padlink crashes, the
    service restores them when it stops and again on its next start.
 
+To try it without starting the game, open the profile in the app with **Preview on controller**
+on and switch on **Show as an Xbox 360 controller**: the background service starts Xbox mode within
+a couple of seconds, and the Controller tab shows a banner plus the Xbox names (A/B/X/Y, LB/RB,
+LT/RT, Back/Start/Guide) on the drawing. Test it at
+[controllertest.org/xinput](https://controllertest.org/xinput) or `evtest`.
+
 Square and Triangle are swapped on the way: the kernel reports them positionally, while the `xpad`
 layout that games expect puts Xbox **X** on `BTN_X` and **Y** on `BTN_Y`.
 
