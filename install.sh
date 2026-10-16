@@ -128,10 +128,10 @@ uninstall() {
 # ============================================================================================
 install_packages() {
   local pm="" pkgs=() missing=()
-  if   command -v dnf     >/dev/null; then pm=dnf;    pkgs=(python3 python3-gobject gtk4 libadwaita python3-evdev acl)
-  elif command -v apt-get >/dev/null; then pm=apt;    pkgs=(python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev acl)
-  elif command -v pacman  >/dev/null; then pm=pacman; pkgs=(python python-gobject gtk4 libadwaita python-evdev acl)
-  elif command -v zypper  >/dev/null; then pm=zypper; pkgs=(python3 python3-gobject typelib-1_0-Gtk-4_0 typelib-1_0-Adw-1 python3-evdev acl)
+  if   command -v dnf     >/dev/null; then pm=dnf;    pkgs=(python3 python3-gobject python3-cairo gtk4 libadwaita python3-evdev acl)
+  elif command -v apt-get >/dev/null; then pm=apt;    pkgs=(python3 python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev acl)
+  elif command -v pacman  >/dev/null; then pm=pacman; pkgs=(python python-gobject python-cairo gtk4 libadwaita python-evdev acl)
+  elif command -v zypper  >/dev/null; then pm=zypper; pkgs=(python3 python3-gobject python3-gobject-cairo typelib-1_0-Gtk-4_0 typelib-1_0-Adw-1 python3-evdev acl)
   else say "Unknown package manager; make sure PyGObject, GTK4, libadwaita and python-evdev are installed."; return; fi
 
   for p in "${pkgs[@]}"; do

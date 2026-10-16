@@ -13,6 +13,11 @@ DS4Windows (`DualSenseDevice.cs`, `DS4Device.cs`).
 **Linux kernel `hid-playstation` and `xpad` drivers**: padlink follows their device-node and
 event conventions; no code is copied.
 
+## Artwork
+
+The controller artwork (`art/controller-realistic-source.png`, and the images built from it in
+`padlink/gui/assets/`) was provided by the project owner, Miguel Augusto Coelho Pinto, for padlink.
+
 ## Trademarks
 
 PlayStation, DualSense and DualShock are trademarks of Sony Interactive Entertainment Inc.
