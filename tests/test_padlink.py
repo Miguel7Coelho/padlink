@@ -383,3 +383,36 @@ def test_other_users_finds_wine_and_skips_padlink(tmp_path):
     assert [(u.pid, u.name) for u in users] == [(200644, "winedevice.exe")]
     assert "winedevice.exe (pid 200644)" in conflict_hint(users) and "Wine" in conflict_hint(users)
     assert other_users(str(tmp_path / "missing"), proc) == []
+
+
+def test_battery_change_only_updates_player_leds(tmp_path, monkeypatch):
+    """A battery step must not re-send the profile colour (it would undo `padlink led`)."""
+    from padlink import daemon as D
+    from padlink.devices import Controller, BUS_BT
+    sent = []
+
+    class W:
+        def write(self, b): sent.append(b)
+        def close(self): pass
+
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6)
+    prof = Profile(name="Desktop", color=(0x30, 0x50, 0xFF), player_leds="battery", is_default=True)
+    pct = {"v": 55}
+    monkeypatch.setattr(D, "load_profiles", lambda: [prof])
+    monkeypatch.setattr(D, "find_controllers", lambda: [c])
+    monkeypatch.setattr(D, "detect_games", lambda: [])
+    monkeypatch.setattr(D, "preview_active", lambda: False)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "other_users", lambda h: [])
+    monkeypatch.setattr(D, "notify", lambda *a, **k: None)
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+    monkeypatch.setattr(d, "_battery", lambda ctrl: pct["v"])
+    d.step()                                   # first apply: colour + LEDs
+    assert sent and sent[-1][3] & 0x04         # BT: valid_flag1 at byte 3 has the light bar bit
+    sent.clear()
+    pct["v"] = 45
+    d.last_reapply = float("inf")              # no trigger re-send in this step
+    d.step()
+    assert len(sent) == 1
+    assert sent[0][3] == 0x10                  # only player LEDs flagged, light bar untouched

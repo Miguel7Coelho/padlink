@@ -89,6 +89,15 @@ class Daemon:
             self.writers.pop(ctrl.hidraw, None)
             self.applied.pop(ctrl.hidraw, None)
 
+    def _apply_player_leds(self, ctrl, profile: Profile, battery_pct: int | None) -> None:
+        w = self._writer(ctrl.hidraw)
+        if w is None:
+            return
+        try:
+            apply(ctrl, player_leds=resolve_player_leds(profile.player_leds, battery_pct), writer=w)
+        except OSError as e:
+            self.log(f"write failed on {ctrl.hidraw}: {e}")
+
     def _battery(self, ctrl) -> int | None:
         info = read_battery(ctrl.battery_path)
         key = ctrl.uniq or ctrl.hidraw
@@ -146,10 +155,13 @@ class Daemon:
                 continue
             battery_changed = profile.player_leds == "battery" and self.last_battery.get(c.hidraw) != pct
             self.last_battery[c.hidraw] = pct
-            if self.applied.get(c.hidraw) != key or battery_changed:
+            if self.applied.get(c.hidraw) != key:
                 self.log(f"applying '{profile.name}' to {c}")
                 self._apply(c, profile, pct)
                 self.applied[c.hidraw] = key
+            elif battery_changed:
+                # only the battery bar changes; don't re-send the colour (it would undo `padlink led`)
+                self._apply_player_leds(c, profile, pct)
             elif reapply and profile.trigger_mode == "override" and c.is_dualsense:
                 self._apply(c, profile, pct, triggers_only=True)
         if reapply:
