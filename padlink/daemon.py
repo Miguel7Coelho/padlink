@@ -19,7 +19,7 @@ from .battery import BatteryInfo, read_battery
 from .control import apply, resolve_player_leds
 from .devices import HidrawWriter, conflict_hint, find_controllers, other_users
 from .games import detect_games
-from .profiles import Profile, load_profiles, pick_profile, preview_active
+from .profiles import Profile, load_profiles, pick_profile, preview_active, preview_wants_xbox
 from .settings import BatterySettings, load_battery_settings
 from .xinput import XboxBridge, run_helper, write_state
 
@@ -168,11 +168,14 @@ class Daemon:
         for gone in set(self.writers) - live:
             self.writers.pop(gone).close()
             self.applied.pop(gone, None)
-        self._sync_xbox(controllers, profile)
+        previewing = preview_active()
+        # while the app previews a profile, its Xbox switch decides (so you can try Xbox mode
+        # without starting the game); otherwise the active profile does
+        self._sync_xbox(controllers, Profile(name="preview", xbox_mode=preview_wants_xbox())
+                        if previewing else profile)
 
         now = time.monotonic()
         reapply = now - self.last_reapply >= REAPPLY_EVERY
-        previewing = preview_active()
         if previewing:
             self.applied.clear()          # re-apply the real profile once the GUI preview ends
         # include the file's mtime so saving an edited profile re-applies it

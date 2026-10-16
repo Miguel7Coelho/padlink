@@ -10,6 +10,15 @@ follows [Semantic Versioning](https://semver.org/).
 - Turn the controller off from the app (⏻ button in the header) or with `padlink off`. Works over
   Bluetooth: padlink drops the connection through BlueZ and the controller powers down; press PS to
   turn it on again. Over USB the button is disabled, since the cable keeps the controller powered.
+- The Controller tab shows when Xbox mode is on: a banner, and the Xbox names (A/B/X/Y, LB/RB,
+  LT/RT, Back/Start/Guide) drawn on the controller.
+
+### Fixed
+- Switching on "Show as an Xbox 360 controller" in the profile editor did nothing until the
+  profile's game was running. With "Preview on controller" on, the previewed profile's Xbox switch
+  now turns Xbox mode on and off right away (through the background service).
+- The app kept sending the light bar and triggers of the previewed profile while Xbox mode was on
+  (it opens the controller before Xbox mode hides it).
 
 ## [0.2.0] - 2026-10-15
 

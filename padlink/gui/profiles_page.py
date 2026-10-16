@@ -177,9 +177,9 @@ class ProfilesPage(Gtk.Box):
 
         g = Adw.PreferencesGroup(title="Xbox controller mode")
         self.xbox = Adw.SwitchRow(title="Show as an Xbox 360 controller",
-                                  subtitle="For games that only understand XInput. While this profile is active, "
-                                           "games see an Xbox pad and the DualSense itself sleeps; it wakes up "
-                                           "again when the profile switches off.")
+                                  subtitle="For games that only understand XInput. While this profile is active "
+                                           "(or previewed here), games see an Xbox pad and the DualSense itself "
+                                           "sleeps; it wakes up again when the profile switches off.")
         g.add(self.xbox)
         page.add(g)
 
@@ -339,7 +339,7 @@ class ProfilesPage(Gtk.Box):
         self._preview_src = 0
         p = self.form_profile()
         if self.is_previewing():
-            touch_preview_lock()
+            touch_preview_lock(p.xbox_mode)
             self.window.apply_profile_preview(p)
         else:
             self.window.mirror_profile(p)     # drawing only, nothing sent to the controller
@@ -347,7 +347,7 @@ class ProfilesPage(Gtk.Box):
 
     def _keep_preview_lock(self):
         if self.is_previewing():
-            touch_preview_lock()
+            touch_preview_lock(self.xbox.get_active())
         return GLib.SOURCE_CONTINUE
 
     def on_shown(self):

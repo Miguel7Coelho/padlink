@@ -72,8 +72,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.readout = Gtk.Label(xalign=0, wrap=True)
         self.readout.add_css_class("monospace")
         self.readout.add_css_class("dim-label")
+        self.xbox_banner = Adw.Banner(title="Xbox 360 mode is on: games see an Xbox controller, "
+                                            "and the DualSense is hidden from them")
         live = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                        margin_top=12, margin_bottom=18, margin_start=18, margin_end=18)
+        live.append(self.xbox_banner)
         live.append(self.pad)
         live.append(self.readout)
         self.empty = Adw.StatusPage(icon_name="input-gaming-symbolic", title="Connect your controller",
@@ -107,6 +110,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._scan()
         GLib.timeout_add_seconds(2, self._scan)
         GLib.timeout_add(33, self._frame)
+        GLib.timeout_add(500, self._update_xbox)
 
     # ---------- controllers ----------
     def _scan(self):
@@ -138,6 +142,10 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self.pad.is_dualsense = ctrl.is_dualsense
         self.reader = InputReader(ctrl.hidraw, ctrl.is_dualsense).start()
+        try:        # open now: once Xbox mode hides the controller, it can't be opened any more
+            self.writer = HidrawWriter(ctrl.hidraw)
+        except OSError:
+            self.writer = None
         self.ctrl_stack.set_visible_child_name("live")
         self.profiles_page.on_shown()
 
@@ -149,6 +157,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.reader = InputReader(self.ctrl.hidraw, self.ctrl.is_dualsense).start()
         self.ctrl_stack.set_visible_child_name("live")
         return GLib.SOURCE_REMOVE
+
+    def _update_xbox(self):
+        on = self.ctrl is not None and self.ctrl.hidraw in xbox_mode_active()
+        if on != self.pad.xbox:
+            self.pad.xbox = on
+            self.pad.queue_draw()
+        self.xbox_banner.set_revealed(on)
+        return GLib.SOURCE_CONTINUE
 
     def _update_battery(self):
         self.off_btn.set_visible(self.ctrl is not None)
@@ -218,8 +234,8 @@ class MainWindow(Adw.ApplicationWindow):
         mask = self.mirror_profile(p)
         if self.ctrl is None:
             return
-        if self.ctrl.hidraw in xbox_mode_active():
-            return      # the pad is asleep in Xbox mode; nothing can be written to it from here
+        if self.writer is None and self.ctrl.hidraw in xbox_mode_active():
+            return      # hidden from programs in Xbox mode and not opened before; can't write now
         try:
             if self.writer is None:
                 self.writer = HidrawWriter(self.ctrl.hidraw)
