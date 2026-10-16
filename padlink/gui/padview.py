@@ -409,18 +409,20 @@ class PadView(Gtk.DrawingArea):
             cr.new_path()
             cr.arc(454, 196, 116, 0, 2 * math.pi)
         def middle():
-            PadView._rrect(cr, 150, 84, 300, 206, 26)
+            # top edge at y=80 = the shoulders' highest point, so the top reads as one straight line
+            cr.new_path()
+            cr.rectangle(146, 80, 308, 210)
         def grip_l():
             cr.new_path()
-            cr.move_to(36, 230)
-            cr.curve_to(22, 320, 34, 404, 92, 414)
+            cr.move_to(30, 196)
+            cr.curve_to(28, 300, 34, 404, 92, 414)
             cr.curve_to(146, 422, 172, 380, 214, 300)
             cr.line_to(150, 190)
             cr.close_path()
         def grip_r():
             cr.new_path()
-            cr.move_to(564, 230)
-            cr.curve_to(578, 320, 566, 404, 508, 414)
+            cr.move_to(570, 196)
+            cr.curve_to(572, 300, 566, 404, 508, 414)
             cr.curve_to(454, 422, 428, 380, 386, 300)
             cr.line_to(450, 190)
             cr.close_path()
