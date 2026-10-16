@@ -15,6 +15,7 @@ with the output of the [diagnostics](#collecting-diagnostics).
 - [Xbox mode](#xbox-mode)
 - [Background service](#background-service)
 - [The app](#the-app)
+- [Turning the controller off](#turning-the-controller-off)
 - [Collecting diagnostics](#collecting-diagnostics)
 - [Resetting everything](#resetting-everything)
 
@@ -287,6 +288,18 @@ when Xbox mode turns off.
 
 ### Icons are missing
 Install the Adwaita icon theme (`adwaita-icon-theme`).
+
+---
+
+## Turning the controller off
+
+- **The ⏻ button is greyed out:** the controller is on USB. The cable keeps it powered, so it
+  can't be switched off from the PC; unplug it.
+- **Nothing happens over Bluetooth:** padlink asks BlueZ to drop the connection
+  (`bluetoothctl disconnect <address>`), and the controller then switches itself off. Check that
+  `bluetoothctl` works (package `bluez`), and try `padlink off` in a terminal to see the error.
+- **Turning it back on:** press **PS**. A controller that's off has its radio off, so the PC can't
+  wake it; there's also no standby mode to put it in.
 
 ---
 
