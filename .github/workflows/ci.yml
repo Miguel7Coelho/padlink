@@ -29,6 +29,16 @@ jobs:
           python -m compileall -q padlink
           python -m py_compile packaging/padlink-hide
 
+  extension:
+    name: GNOME extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: |
+          cp gnome-extension/*/extension.js /tmp/extension.mjs && node --check /tmp/extension.mjs
+          python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('gnome-extension/*/metadata.json')]"
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
