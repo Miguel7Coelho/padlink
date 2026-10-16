@@ -121,8 +121,30 @@ for effects that use them.
 
 ## Light bar and LEDs
 
-### The colour changes back on its own
-**Steam Input** sets the light bar while Steam is running. Either:
+### The colour doesn't change, or changes back on its own
+Another program is driving the controller and sending its own colour. If adaptive triggers still
+work but the light bar won't change, this is almost certainly the cause. padlink tells you which
+program it is:
+```bash
+padlink list          # "⚠ also open in …" names the program
+```
+(or `sudo lsof /dev/hidrawN`, using the `hidrawN` that `padlink list` shows).
+
+**`winedevice.exe` (Wine):** a Windows app running under Wine, such as a DAW, a launcher or a game,
+opened the controller through `hidraw`. Close that app, or stop its prefix:
+```bash
+tr '\0' '\n' < /proc/<pid>/environ | grep WINEPREFIX    # which prefix
+WINEPREFIX=<that prefix> wineserver -k
+```
+To stop that prefix from grabbing controllers at all (it falls back to normal input devices and
+leaves the light bar alone):
+```bash
+WINEPREFIX=<that prefix> wine reg add 'HKLM\System\CurrentControlSet\Services\winebus' /v DisableHidraw /t REG_DWORD /d 1 /f
+```
+Games running through **Proton** do the same thing on purpose (DualSense support). Use a profile
+with `mode = "game"` for those, or accept that the game sets the colour while it runs.
+
+**Steam:** Steam Input sets the light bar while Steam is running. Either:
 - *Steam → Settings → Controller → Enable Steam Input for PlayStation controllers* → off, or set it
   per game (game → Properties → Controller → *Disable Steam Input*), or
 - let Steam handle the colour; padlink still handles the triggers.

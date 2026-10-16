@@ -359,3 +359,27 @@ def test_daemon_toggles_xbox_mode_with_profile(tmp_path, monkeypatch):
     d._sync_xbox([c], desk)            # game closed -> real pad wakes up
     assert [e for e in events if e[0] != "state"] == [("start", "/dev/hidraw3"), ("stop", "/dev/hidraw3")]
     assert events[-1] == ("state", ())
+
+
+# ---------- other programs holding the controller ----------
+
+def test_other_users_finds_wine_and_skips_padlink(tmp_path):
+    from padlink.devices import other_users, conflict_hint
+    dev = tmp_path / "hidraw6"
+    dev.write_text("")
+    proc = tmp_path / "proc"
+
+    def fake(pid, comm, cmd, target):
+        d = proc / str(pid)
+        (d / "fd").mkdir(parents=True)
+        (d / "comm").write_text(comm + "\n")
+        (d / "cmdline").write_bytes(cmd.replace(" ", "\0").encode() + b"\0")
+        (d / "fd" / "73").symlink_to(target)
+
+    fake(200644, "winedevice.exe", "C:\\windows\\system32\\winedevice.exe", dev)
+    fake(416940, "python3", "/usr/bin/python3 -m padlink daemon -v", dev)
+    fake(5000, "firefox", "/usr/lib64/firefox/firefox", tmp_path / "other")
+    users = other_users(str(dev), proc)
+    assert [(u.pid, u.name) for u in users] == [(200644, "winedevice.exe")]
+    assert "winedevice.exe (pid 200644)" in conflict_hint(users) and "Wine" in conflict_hint(users)
+    assert other_users(str(tmp_path / "missing"), proc) == []

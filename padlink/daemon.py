@@ -17,7 +17,7 @@ import time
 
 from .battery import read_battery
 from .control import apply, resolve_player_leds
-from .devices import HidrawWriter, find_controllers
+from .devices import HidrawWriter, conflict_hint, find_controllers, other_users
 from .games import detect_games
 from .profiles import Profile, load_profiles, pick_profile, preview_active
 from .xinput import XboxBridge, run_helper, write_state
@@ -45,6 +45,8 @@ class Daemon:
         self.last_battery: dict[str, int | None] = {}
         self.current: Profile | None = None
         self.bridges: dict[str, XboxBridge] = {}   # hidraw -> running Xbox mode
+        self.conflicts_seen: dict[str, frozenset[int]] = {}   # hidraw -> pids already reported
+        self.last_conflict_check = 0.0
 
     def log(self, msg: str) -> None:
         if self.verbose:
@@ -152,6 +154,22 @@ class Daemon:
                 self._apply(c, profile, pct, triggers_only=True)
         if reapply:
             self.last_reapply = now
+        if now - self.last_conflict_check >= 15:
+            self.last_conflict_check = now
+            self._check_conflicts(controllers)
+
+    def _check_conflicts(self, controllers) -> None:
+        """Tell the user once when another program grabs the controller (it will fight over the lights)."""
+        for c in controllers:
+            if c.hidraw in self.bridges:
+                continue                     # in Xbox mode the real pad is hidden on purpose
+            users = other_users(c.hidraw)
+            pids = frozenset(u.pid for u in users)
+            if users and pids != self.conflicts_seen.get(c.hidraw):
+                msg = conflict_hint(users)
+                self.log(f"{c}: {msg}")
+                notify(f"{c.model}: light bar may be overridden", msg)
+            self.conflicts_seen[c.hidraw] = pids
 
     def _sync_xbox(self, controllers, profile: Profile | None) -> None:
         """Xbox mode on exactly when the active profile wants it; the real pad sleeps meanwhile."""
