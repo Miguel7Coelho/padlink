@@ -61,7 +61,7 @@ class Daemon:
             try:
                 w = HidrawWriter(path)
             except PermissionError:
-                notify("padlink", f"No permission to write {path}. Install the udev rule (see README).", "critical")
+                notify("padlink", f"No permission to write {path}. Install the udev rule (see README).", "normal")
                 return None
             except OSError:
                 return None
@@ -249,7 +249,7 @@ class Daemon:
                     self.log(f"Xbox mode failed for {c}: {e!r}")
                     bridge.stop()
                     if failed is None or failed[0] != str(e):     # tell the user once per error
-                        notify("padlink", f"Xbox mode failed: {e}", "critical")
+                        notify("padlink", f"Xbox mode failed: {e}", "normal")
                     self.xbox_failed[c.hidraw] = (str(e), time.monotonic())
                     continue
                 self.xbox_failed.pop(c.hidraw, None)

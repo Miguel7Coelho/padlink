@@ -22,7 +22,8 @@ follows [Semantic Versioning](https://semver.org/).
   of the controller's input nodes (run `install.sh` again), and Xbox mode no longer fails if one of
   those extra nodes can't be grabbed.
 - When Xbox mode couldn't start, the background service retried and showed the same error
-  notification every 2 seconds. It now notifies once per error and retries every 30 seconds.
+  notification every 2 seconds. It now notifies once per error and retries every 30 seconds, and the notification is no longer
+  "critical" (GNOME keeps critical notifications on screen until each one is dismissed).
 - The app kept sending the light bar and triggers of the previewed profile while Xbox mode was on
   (it opens the controller before Xbox mode hides it).
 
