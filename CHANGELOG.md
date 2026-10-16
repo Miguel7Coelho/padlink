@@ -17,6 +17,10 @@ follows [Semantic Versioning](https://semver.org/).
 - Switching on "Show as an Xbox 360 controller" in the profile editor did nothing until the
   profile's game was running. With "Preview on controller" on, the previewed profile's Xbox switch
   now turns Xbox mode on and off right away (through the background service).
+- Xbox mode failed with "Permission denied: /dev/input/eventN": the controller's motion sensor and
+  touch pad nodes are root-only by default. The udev rule now gives the logged-in user access to all
+  of the controller's input nodes (run `install.sh` again), and Xbox mode no longer fails if one of
+  those extra nodes can't be grabbed.
 - The app kept sending the light bar and triggers of the previewed profile while Xbox mode was on
   (it opens the controller before Xbox mode hides it).
 
