@@ -26,6 +26,30 @@ from .service_page import ServicePage  # noqa: E402
 APP_ID = "io.github.miguel7coelho.padlink"
 
 
+def _ui_file():
+    from ..profiles import CONFIG_DIR
+    return CONFIG_DIR / "ui.json"
+
+
+def _load_ui() -> dict:
+    import json
+    try:
+        return json.loads(_ui_file().read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_ui(**values) -> None:
+    import json
+    data = _load_ui()
+    data.update(values)
+    try:
+        _ui_file().parent.mkdir(parents=True, exist_ok=True)
+        _ui_file().write_text(json.dumps(data))
+    except OSError:
+        pass
+
+
 def _battery_icon(pct, charging) -> str:
     if pct is None:
         return "battery-missing-symbolic"
@@ -69,7 +93,22 @@ class MainWindow(Adw.ApplicationWindow):
         self.readout.add_css_class("dim-label")
         names = Gtk.Switch(active=True, valign=Gtk.Align.CENTER)
         names.connect("notify::active", lambda s, _p: (setattr(self.pad, "show_labels", s.get_active()), self.pad.queue_draw()))
+        styles = ["outline", "shaded"]
+        style_dd = Gtk.DropDown(model=Gtk.StringList.new(["Outline", "Shaded"]), valign=Gtk.Align.CENTER,
+                                tooltip_text="Controller drawing style")
+        saved = _load_ui().get("controller_style", "outline")
+        self.pad.style = saved if saved in styles else "outline"
+        style_dd.set_selected(styles.index(self.pad.style))
+
+        def on_style(dd, _p):
+            self.pad.style = styles[dd.get_selected()]
+            self.pad.queue_draw()
+            _save_ui(controller_style=self.pad.style)
+        style_dd.connect("notify::selected", on_style)
         names_box = Gtk.Box(spacing=8, halign=Gtk.Align.END)
+        names_box.append(Gtk.Label(label="Style"))
+        names_box.append(style_dd)
+        names_box.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=6, margin_end=6))
         names_box.append(Gtk.Label(label="Show names"))
         names_box.append(names)
         live = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,

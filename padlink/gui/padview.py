@@ -46,6 +46,7 @@ class PadView(Gtk.DrawingArea):
         self.player_mask = 0
         self.show_labels = True
         self.is_dualsense = True
+        self.style = "outline"            # "outline" (flat, bold lines) or "shaded"
         self.set_content_width(W)
         self.set_content_height(H)
         self.set_hexpand(True)
@@ -177,6 +178,9 @@ class PadView(Gtk.DrawingArea):
         cr.translate((width - W * scale) / 2, (height - H * scale) / 2)
         cr.scale(scale, scale)
 
+        if self.style == "outline":
+            self._draw_outline(cr, P, s, p)
+            return
         self._draw_triggers(cr, P, s, p)
         self._draw_body(cr, P)
         self._draw_touchpad(cr, P, s, p)
@@ -380,6 +384,210 @@ class PadView(Gtk.DrawingArea):
             self._rrect(cr, 287, 268, 26, 9, 4.5)
             self._part(cr, P, 268, 277, "mute" in p, color=(0.95, 0.55, 0.2))
             self._label(cr, P, "Mute", 300, 291, 9, alpha=0.55)
+
+    # ================================================================== outline style
+    # Flat drawing with bold outlines: round pads around the D-pad and action buttons,
+    # ringed sticks, and the touch pad outlined in the light bar colour.
+    O_DPAD = (138, 196)
+    O_FACE = (462, 196)
+    O_LSTICK = (228, 292)
+    O_RSTICK = (372, 292)
+
+    def _o_colors(self, P):
+        line = (*P["fg"], 0.88)
+        fill = (0.17, 0.18, 0.21) if P["dark"] else (1.0, 1.0, 1.0)
+        soft = (0.22, 0.23, 0.27) if P["dark"] else (0.95, 0.95, 0.97)
+        return line, fill, soft
+
+    @staticmethod
+    def _o_body_shapes(cr):
+        """Calls back with each shape path; the union of these is the controller outline."""
+        def shoulders():
+            cr.new_path()
+            cr.arc(146, 196, 116, 0, 2 * math.pi)
+        def shoulders_r():
+            cr.new_path()
+            cr.arc(454, 196, 116, 0, 2 * math.pi)
+        def middle():
+            PadView._rrect(cr, 150, 84, 300, 206, 26)
+        def grip_l():
+            cr.new_path()
+            cr.move_to(36, 230)
+            cr.curve_to(22, 320, 34, 404, 92, 414)
+            cr.curve_to(146, 422, 172, 380, 214, 300)
+            cr.line_to(150, 190)
+            cr.close_path()
+        def grip_r():
+            cr.new_path()
+            cr.move_to(564, 230)
+            cr.curve_to(578, 320, 566, 404, 508, 414)
+            cr.curve_to(454, 422, 428, 380, 386, 300)
+            cr.line_to(450, 190)
+            cr.close_path()
+        return (shoulders, shoulders_r, middle, grip_l, grip_r)
+
+    def _o_line(self, cr, color, width):
+        cr.set_source_rgba(*color)
+        cr.set_line_width(width)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        cr.stroke()
+
+    def _o_fill_line(self, cr, fill, line, width=2.6):
+        cr.set_source_rgba(*fill, 1) if len(fill) == 3 else cr.set_source_rgba(*fill)
+        cr.fill_preserve()
+        self._o_line(cr, line, width)
+
+    def _draw_outline(self, cr, P, s, p):
+        line, fill, soft = self._o_colors(P)
+        LW = 3.2
+
+        # ---- triggers and bumpers (behind the body)
+        for name, x, val in (("l2", 92, s.l2), ("r2", 418, s.r2)):
+            self._rrect(cr, x, 10, 90, 30, 12)
+            self._o_fill_line(cr, fill, line, 2.6)
+            if val:
+                cr.save()
+                self._rrect(cr, x + 3, 13, 84, 24, 9)
+                cr.clip()
+                w = 84 * val / 255
+                cr.rectangle(x + 3 if name == "l2" else x + 87 - w, 10, w, 30)
+                cr.set_source_rgba(*ACCENT, 0.95)
+                cr.fill()
+                cr.restore()
+            self._text(cr, f"{name.upper()}  {val}", x + 45, 25, 12, line)
+        for name, x0, x1 in (("l1", 70, 200), ("r1", 400, 530)):
+            cr.new_path()
+            cr.move_to(x0, 74)
+            cr.curve_to(x0 + 18, 48, x1 - 18, 46, x1, 68)
+            cr.line_to(x1, 80)
+            cr.line_to(x0, 86)
+            cr.close_path()
+            self._o_fill_line(cr, ACCENT if name in p else fill, line, 2.6)
+            self._text(cr, name.upper(), (x0 + x1) / 2, 66, 10,
+                       (1, 1, 1, 0.95) if name in p else line)
+
+        # ---- body: thick stroke of every shape, then fill them all -> only the union's edge remains
+        shapes = self._o_body_shapes(cr)
+        for f in shapes:
+            f()
+            self._o_line(cr, line, LW * 2)
+        for f in shapes:
+            f()
+            cr.set_source_rgb(*fill)
+            cr.fill()
+
+        # ---- round pads around the D-pad and the action buttons
+        for cx, cy in (self.O_DPAD, self.O_FACE):
+            cr.new_path()
+            cr.arc(cx, cy, 64, 0, 2 * math.pi)
+            self._o_fill_line(cr, soft, line, 2.2)
+
+        # ---- touch pad, outlined in the light bar colour
+        tx, ty, tw, th = 214, 100, 172, 84
+        for i in range(5, 0, -1):
+            self._rrect(cr, tx - i * 2, ty - i * 2, tw + i * 4, th + i * 4, 14 + i * 2)
+            cr.set_source_rgba(*self.lightbar, 0.07)
+            cr.fill()
+        self._rrect(cr, tx, ty, tw, th, 12)
+        cr.set_source_rgba(*(ACCENT if "touchpad" in p else soft), 0.9 if "touchpad" in p else 1)
+        cr.fill_preserve()
+        self._o_line(cr, (*self.lightbar, 1), 3.2)
+        for t in s.touches:
+            if t.active:
+                px = tx + tw * min(t.x, s.touch_w) / s.touch_w
+                py = ty + th * min(t.y, s.touch_h) / s.touch_h
+                cr.new_path()
+                cr.arc(px, py, 8, 0, 2 * math.pi)
+                cr.set_source_rgba(*ACCENT, 0.9)
+                cr.fill()
+        self._label(cr, P, "Touch pad", 300, ty + th / 2 + 4, 11, alpha=0.6)
+        self._label(cr, P, "outline = light bar", 300, ty + th - 10, 8.5, alpha=0.45)
+
+        # ---- Create / Options
+        for name, label, x in (("create", "Create", 184), ("options", "Options", 416)):
+            self._rrect(cr, x - 6, 104, 12, 24, 6)
+            self._o_fill_line(cr, ACCENT if name in p else fill, line, 2.2)
+            self._label(cr, P, label, x - 32 if name == "create" else x + 34, 120, 10)
+
+        # ---- player indicator
+        for i in range(5):
+            x, y = 268 + i * 16, 198
+            cr.new_path()
+            if self.player_mask & (1 << i):
+                cr.arc(x, y, 6, 0, 2 * math.pi)
+                cr.set_source_rgba(*ACCENT, 0.3)
+                cr.fill()
+                cr.arc(x, y, 3.4, 0, 2 * math.pi)
+                cr.set_source_rgba(*ACCENT, 1)
+                cr.fill()
+            else:
+                cr.arc(x, y, 2.8, 0, 2 * math.pi)
+                cr.set_source_rgba(*P["fg"], 0.25)
+                cr.fill()
+        self._label(cr, P, "Player indicator", 300, 214, 9, alpha=0.5)
+
+        # ---- D-pad: one rounded cross
+        cx, cy = self.O_DPAD
+        a, r = 34, 12
+        cr.new_path()
+        pts = ((r, -a), (r, -r), (a, -r), (a, r), (r, r), (r, a), (-r, a), (-r, r),
+               (-a, r), (-a, -r), (-r, -r), (-r, -a))
+        cr.move_to(cx - r, cy - a)
+        for dx, dy in pts:
+            cr.line_to(cx + dx, cy + dy)
+        cr.close_path()
+        self._o_fill_line(cr, fill, line, 2.6)
+        arms = {"up": (cx - r, cy - a, 2 * r, a - 3), "down": (cx - r, cy + 3, 2 * r, a - 3),
+                "left": (cx - a, cy - r, a - 3, 2 * r), "right": (cx + 3, cy - r, a - 3, 2 * r)}
+        for name, (x, y, w, h) in arms.items():
+            if name in p:
+                self._rrect(cr, x + 2.5, y + 2.5, w - 5, h - 5, 4)
+                cr.set_source_rgba(*ACCENT, 1)
+                cr.fill()
+        self._label(cr, P, "Directional buttons", cx, cy + 82, 10)
+
+        # ---- action buttons
+        fx, fy = self.O_FACE
+        for name, (dx, dy) in (("triangle", (0, -1)), ("cross", (0, 1)), ("square", (-1, 0)), ("circle", (1, 0))):
+            bx, by = fx + dx * 36, fy + dy * 36
+            col = FACE_COLORS[name]
+            cr.new_path()
+            cr.arc(bx, by, 17, 0, 2 * math.pi)
+            self._o_fill_line(cr, col if name in p else fill, line, 2.6)
+            self._symbol(cr, name, bx, by, (1, 1, 1) if name in p else col)
+        self._label(cr, P, "Action buttons", fx, fy + 82, 10)
+
+        # ---- sticks: outer ring + moving cap with an inner ring
+        for name, (sx, sy), x, y in (("l3", self.O_LSTICK, s.lx, s.ly), ("r3", self.O_RSTICK, s.rx, s.ry)):
+            cr.new_path()
+            cr.arc(sx, sy, 42, 0, 2 * math.pi)
+            self._o_fill_line(cr, soft, line, 2.6)
+            kx = sx + (x - 128) / 128 * 14
+            ky = sy + (y - 128) / 128 * 14
+            cr.new_path()
+            cr.arc(kx, ky, 27, 0, 2 * math.pi)
+            self._o_fill_line(cr, ACCENT if name in p else fill, line, 2.6)
+            cr.new_path()
+            cr.arc(kx, ky, 17, 0, 2 * math.pi)
+            self._o_line(cr, (1, 1, 1, 0.9) if name in p else line, 2.0)
+            label = "Left stick / L3" if name == "l3" else "Right stick / R3"
+            self._label(cr, P, label, sx, sy + 60, 10)
+
+        # ---- centre: Mute pill above the PS button
+        if self.is_dualsense:
+            self._rrect(cr, 284, 232, 32, 11, 5.5)
+            self._o_fill_line(cr, (0.95, 0.55, 0.2) if "mute" in p else fill, line, 2.2)
+        cr.new_path()
+        cr.arc(300, 268, 15, 0, 2 * math.pi)
+        self._o_fill_line(cr, ACCENT if "ps" in p else fill, line, 2.6)
+        self._text(cr, "PS", 300, 268, 10, (1, 1, 1, 0.95) if "ps" in p else line)
+        if self.is_dualsense:
+            self._label(cr, P, "Mute", 338, 241, 9, alpha=0.55)
+
+        for name, label, x in (("fn_l", "Fn", 205), ("fn_r", "Fn", 395),
+                               ("paddle_l", "Back L", 120), ("paddle_r", "Back R", 480)):
+            if name in p:
+                self._label(cr, P, label, x, 428, 11, True, 1.0)
 
     @staticmethod
     def _symbol(cr, name, x, y, color):
