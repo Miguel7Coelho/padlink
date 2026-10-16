@@ -18,6 +18,11 @@ follows [Semantic Versioning](https://semver.org/).
   override padlink, which was the cause of "the light bar is not being controlled" reports.
 - Troubleshooting for Wine prefixes that grab the controller (`winebus` `DisableHidraw`).
 
+### Fixed
+- The background service re-sent the whole profile, light bar colour included, every time the
+  battery level changed, undoing colours set with `padlink led`. A battery change now only updates
+  the player indicator.
+
 ### Changed
 - DualSense USB output reports are now 63 bytes, the size used by the Linux `hid-playstation`
   driver (previously 48).
