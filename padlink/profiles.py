@@ -188,6 +188,14 @@ def touch_preview_lock() -> None:
         pass
 
 
+def clear_preview_lock() -> None:
+    """Hand the controller back to the background service right away (app closed / preview off)."""
+    try:
+        PREVIEW_LOCK.unlink()
+    except OSError:
+        pass
+
+
 def preview_active() -> bool:
     import time
     try:

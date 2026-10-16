@@ -264,9 +264,10 @@ systemctl --user restart padlink
 
 - **`Unit padlink.service not found`** → run `./install.sh`, or press **Install** on the Service page.
 - **It doesn't start at login** → `systemctl --user enable padlink`.
-- **The app shows changes the service then overrides** → while you edit in the app the service pauses
-  (for about 6 seconds after the last change). That's by design: the service applies the
-  *active game's* profile, and the editor shows the profile you're editing.
+- **The controller keeps the profile I selected in the app instead of switching for my game**: with
+  *Preview on controller* on, the profile selected in the app's editor stays on the controller (on
+  every tab) while padlink's window is open, and automatic game switching pauses. Close the window,
+  or turn *Preview on controller* off, and the service applies the right profile immediately.
 
 ---
 

@@ -12,8 +12,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
 from ..games import detect_games  # noqa: E402
-from ..profiles import (Profile, delete_profile, load_profiles, save_profile,  # noqa: E402
-                        touch_preview_lock)
+from ..profiles import (Profile, clear_preview_lock, delete_profile, load_profiles,  # noqa: E402
+                        save_profile, touch_preview_lock)
 from ..triggers import TriggerSetting  # noqa: E402
 
 # effect id -> (label, start range or None, uses strength)
@@ -150,7 +150,9 @@ class ProfilesPage(Gtk.Box):
         g.set_header_suffix(btns)
         self.name = Adw.EntryRow(title="Name")
         self.default = Adw.SwitchRow(title="Default profile", subtitle="Used when no game matches")
-        self.preview = Adw.SwitchRow(title="Preview on controller", subtitle="Apply changes live while editing",
+        self.preview = Adw.SwitchRow(title="Preview on controller",
+                                     subtitle="Keep this profile on the controller while padlink is open. "
+                                              "Game profiles switch automatically again when you close it.",
                                      active=True)
         for r in (self.name, self.default, self.preview):
             g.add(r)
@@ -212,6 +214,10 @@ class ProfilesPage(Gtk.Box):
             w.connect(sig, self._changed)
 
         GLib.timeout_add_seconds(2, self._keep_preview_lock)
+        # coming back on screen (window restored, page switched back): send the edited profile again
+        self.connect("map", lambda *_: self._schedule_preview())
+        self.preview.connect("notify::active", lambda *_: (None if self.preview.get_active()
+                                                           else clear_preview_lock()))
         self.reload()
 
     # ---------- list ----------
@@ -320,10 +326,19 @@ class ProfilesPage(Gtk.Box):
             GLib.source_remove(self._preview_src)
         self._preview_src = GLib.timeout_add(80, self._do_preview)
 
+    def is_previewing(self) -> bool:
+        """The selected profile stays on the controller on every tab while padlink is open.
+
+        (It used to stop when you left the Profiles page, so switching to the Controller tab
+        handed the controller back to the background service, which put the active game's
+        profile back after a few seconds.)
+        """
+        return self.preview.get_active() and not self.window.closing
+
     def _do_preview(self):
         self._preview_src = 0
         p = self.form_profile()
-        if self.preview.get_active() and self.get_mapped():
+        if self.is_previewing():
             touch_preview_lock()
             self.window.apply_profile_preview(p)
         else:
@@ -331,7 +346,7 @@ class ProfilesPage(Gtk.Box):
         return GLib.SOURCE_REMOVE
 
     def _keep_preview_lock(self):
-        if self.preview.get_active() and self.get_mapped():
+        if self.is_previewing():
             touch_preview_lock()
         return GLib.SOURCE_CONTINUE
 

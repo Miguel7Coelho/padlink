@@ -16,6 +16,12 @@ follows [Semantic Versioning](https://semver.org/).
 - The app's battery indicator turns red when the battery is low.
 - Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
 
+### Fixed
+- Switching from the Profiles page to the Controller tab ended the preview, and a few seconds later
+  the background service put the active game's profile back on the controller. The selected
+  profile now stays on the controller on every tab (and while minimized) as long as padlink is
+  open; closing the window hands control back to the service immediately.
+
 ### Changed
 - New controller view: a rendered controller on a transparent background with the live state drawn
   on top (L2/R2 meters, pressed highlights, stick position markers, touch points, player LEDs, and
