@@ -17,13 +17,11 @@ follows [Semantic Versioning](https://semver.org/).
 - Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
 
 ### Changed
-- Redesigned controller view with three styles, switchable on the Controller page and remembered:
-  - **Realistic** (default): a rendered controller with live highlights, stick markers, L2/R2
-    meters and player LEDs drawn on top.
-  - **Outline**: flat, bold lines, round pads around the D-pad and action buttons, ringed sticks.
-  - **Shaded**: single-tone shell with depth and recessed sticks.
-
-  In every style the touch pad is outlined in the current light bar colour.
+- New controller view: a rendered controller on a transparent background with the live state drawn
+  on top (L2/R2 meters, pressed highlights, stick position markers, touch points, player LEDs, and
+  the touch pad ring in the current light bar colour). Labels outside the controller follow the
+  theme's text colour. The asset is built from `art/controller-realistic-source.png` by
+  `scripts/make-realistic-asset.py`.
 - Low-battery notification now comes below 25% (was at 20%); thresholds are configurable.
 
 ## [0.1.1] - 2026-10-15
