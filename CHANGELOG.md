@@ -8,10 +8,16 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [0.1.1] - 2026-10-15
 
-### Fixed
-- Light bar, player indicator, adaptive triggers and rumble had no effect on a DualSense connected
-  by **USB**: output reports were 48 bytes, and the controller ignores reports shorter than its full
-  63-byte size. They now match the size used by the Linux `hid-playstation` driver.
+### Added
+- Detects other programs that have the controller open (Wine's `winedevice.exe`, Steam, Proton
+  games) and names them in `padlink list`, after `padlink led` / `padlink player`, and in a desktop
+  notification from the background service. These programs send their own light bar colour and
+  override padlink, which was the cause of "the light bar is not being controlled" reports.
+- Troubleshooting for Wine prefixes that grab the controller (`winebus` `DisableHidraw`).
+
+### Changed
+- DualSense USB output reports are now 63 bytes, the size used by the Linux `hid-playstation`
+  driver (previously 48).
 
 ## [0.1.0] - 2026-10-15
 
