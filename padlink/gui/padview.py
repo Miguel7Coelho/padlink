@@ -1,4 +1,9 @@
-"""Live controller schematic drawn with cairo. Labels use Sony's control names."""
+"""Live controller drawing (cairo). An original schematic with Sony's control names as labels.
+
+Every control sits where it is on the real pad, so what lights up here matches what you press.
+The style adapts to the light/dark theme: a single-tone shell with depth, recessed stick wells,
+and a glow around the touch pad in the light bar's current colour.
+"""
 from __future__ import annotations
 
 import math
@@ -8,23 +13,29 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk  # noqa: E402
 
+import cairo  # noqa: E402
+
 from ..inputs import PadState  # noqa: E402
 
-W, H = 600, 420          # logical canvas; scaled to the widget
+W, H = 600, 430          # logical canvas; scaled to the widget
 ACCENT = (0.21, 0.52, 0.89)
-FACE_COLORS = {          # the classic PlayStation symbol colours
-    "triangle": (0.25, 0.75, 0.55),
-    "circle": (0.90, 0.30, 0.35),
-    "cross": (0.35, 0.55, 0.95),
-    "square": (0.85, 0.45, 0.75),
+FACE_COLORS = {          # symbol colours for the action buttons
+    "triangle": (0.27, 0.78, 0.58),
+    "circle": (0.94, 0.33, 0.38),
+    "cross": (0.40, 0.60, 0.98),
+    "square": (0.88, 0.48, 0.80),
 }
 
-TOUCHPAD = (205, 92, 190, 100)          # x, y, w, h
-DPAD_C = (140, 190)
-FACE_C = (460, 190)
-LSTICK = (215, 272)
-RSTICK = (385, 272)
-STICK_R = 34
+TOUCHPAD = (210, 96, 180, 96)          # x, y, w, h
+DPAD_C = (145, 196)
+FACE_C = (455, 196)
+LSTICK = (220, 278)
+RSTICK = (380, 278)
+STICK_R = 36
+
+
+def _mix(a, b, t):
+    return tuple(x + (y - x) * t for x, y in zip(a, b))
 
 
 class PadView(Gtk.DrawingArea):
@@ -45,12 +56,29 @@ class PadView(Gtk.DrawingArea):
         self.state = state
         self.queue_draw()
 
-    # ---------- helpers ----------
-    def _fg(self):
-        c = self.get_color()          # follows light/dark theme
-        return c.red, c.green, c.blue
+    # ------------------------------------------------------------------ palette
+    def _palette(self):
+        c = self.get_color()                     # theme foreground
+        fg = (c.red, c.green, c.blue)
+        dark = (c.red + c.green + c.blue) / 3 > 0.5    # light text => dark theme
+        if dark:
+            return dict(dark=True, fg=fg,
+                        body_top=(0.26, 0.27, 0.32), body_bot=(0.16, 0.17, 0.20),
+                        edge=(1, 1, 1, 0.10), highlight=(1, 1, 1, 0.07), shadow=(0, 0, 0, 0.45),
+                        part=(0.30, 0.31, 0.36), part_hi=(0.38, 0.39, 0.45), well=(0.10, 0.10, 0.12),
+                        cap_top=(0.36, 0.37, 0.42), cap_bot=(0.22, 0.23, 0.27),
+                        pad_top=(0.21, 0.22, 0.26), pad_bot=(0.17, 0.18, 0.21))
+        return dict(dark=False, fg=fg,
+                    body_top=(0.98, 0.98, 0.99), body_bot=(0.86, 0.87, 0.90),
+                    edge=(0, 0, 0, 0.16), highlight=(1, 1, 1, 0.9), shadow=(0, 0, 0, 0.16),
+                    part=(0.93, 0.93, 0.95), part_hi=(1, 1, 1), well=(0.62, 0.63, 0.67),
+                    cap_top=(0.97, 0.97, 0.98), cap_bot=(0.80, 0.81, 0.84),
+                    pad_top=(0.95, 0.95, 0.97), pad_bot=(0.88, 0.89, 0.92))
 
-    def _rrect(self, cr, x, y, w, h, r):
+    # ------------------------------------------------------------------ helpers
+    @staticmethod
+    def _rrect(cr, x, y, w, h, r):
+        r = min(r, w / 2, h / 2)
         cr.new_sub_path()
         cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
         cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
@@ -58,30 +86,90 @@ class PadView(Gtk.DrawingArea):
         cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
         cr.close_path()
 
-    def _shape(self, cr, pressed: bool, fg, alpha_idle=0.10, color=None):
+    @staticmethod
+    def _vgrad(y0, y1, top, bot, alpha=1.0):
+        g = cairo.LinearGradient(0, y0, 0, y1)
+        g.add_color_stop_rgba(0, *top, alpha)
+        g.add_color_stop_rgba(1, *bot, alpha)
+        return g
+
+    def _part(self, cr, P, y0, y1, pressed=False, color=None):
+        """Fill the current path as a raised part (or accent when pressed), keep path for stroke."""
         if pressed:
-            cr.set_source_rgba(*(color or ACCENT), 0.95)
+            c = color or ACCENT
+            cr.set_source(self._vgrad(y0, y1, _mix(c, (1, 1, 1), 0.18), _mix(c, (0, 0, 0), 0.15)))
         else:
-            cr.set_source_rgba(*fg, alpha_idle)
+            cr.set_source(self._vgrad(y0, y1, P["part_hi"], P["part"]))
         cr.fill_preserve()
-        cr.set_source_rgba(*fg, 0.55)
-        cr.set_line_width(1.5)
+        cr.set_source_rgba(*P["edge"])
+        cr.set_line_width(1.2)
         cr.stroke()
 
-    def _label(self, cr, text, x, y, fg, size=11, bold=False, alpha=0.75):
+    def _label(self, cr, P, text, x, y, size=10.5, bold=False, alpha=0.70):
         if not self.show_labels:
             return
-        cr.select_font_face("Sans", 0, 1 if bold else 0)
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL,
+                            cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL)
         cr.set_font_size(size)
         ext = cr.text_extents(text)
         cr.move_to(x - ext.width / 2 - ext.x_bearing, y)
-        cr.set_source_rgba(*fg, alpha)
+        cr.set_source_rgba(*P["fg"], alpha)
         cr.show_text(text)
-        cr.new_path()      # show_text leaves a current point; without this the next arc draws a line from it
+        cr.new_path()
 
-    # ---------- drawing ----------
+    def _text(self, cr, text, x, y, size, color, bold=True):
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL,
+                            cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(size)
+        ext = cr.text_extents(text)
+        cr.move_to(x - ext.width / 2 - ext.x_bearing, y - ext.height / 2 - ext.y_bearing)
+        cr.set_source_rgba(*color)
+        cr.show_text(text)
+        cr.new_path()
+
+    # ------------------------------------------------------------------ body
+    @staticmethod
+    def _body_path(cr, dy=0.0, grow=0.0):
+        g = grow
+        cr.new_path()
+        cr.move_to(170, 72 - g + dy)
+        cr.curve_to(240, 62 - g + dy, 360, 62 - g + dy, 430, 72 - g + dy)
+        cr.curve_to(500, 76 - g + dy, 548, 104 + dy, 566 + g, 168 + dy)
+        cr.curve_to(586 + g, 240 + dy, 590 + g, 330 + dy, 566 + g, 388 + g + dy)
+        cr.curve_to(548, 422 + g + dy, 506, 418 + g + dy, 486, 392 + dy)
+        cr.curve_to(468, 368 + dy, 452, 348 + dy, 424, 342 + dy)
+        cr.curve_to(384, 333 + dy, 216, 333 + dy, 176, 342 + dy)
+        cr.curve_to(148, 348 + dy, 132, 368 + dy, 114, 392 + dy)
+        cr.curve_to(94, 418 + g + dy, 52, 422 + g + dy, 34 - g, 388 + g + dy)
+        cr.curve_to(10 - g, 330 + dy, 14 - g, 240 + dy, 34 - g, 168 + dy)
+        cr.curve_to(52, 104 + dy, 100, 76 - g + dy, 170, 72 - g + dy)
+        cr.close_path()
+
+    def _draw_body(self, cr, P):
+        # soft shadow: a few widening, fading copies below the shell
+        for i in range(6, 0, -1):
+            self._body_path(cr, dy=7 + i * 1.5, grow=i * 1.6)
+            cr.set_source_rgba(*P["shadow"][:3], P["shadow"][3] / 7)
+            cr.fill()
+        self._body_path(cr)
+        cr.set_source(self._vgrad(62, 420, P["body_top"], P["body_bot"]))
+        cr.fill_preserve()
+        cr.set_source_rgba(*P["edge"])
+        cr.set_line_width(1.6)
+        cr.stroke()
+        # top highlight along the upper edge
+        cr.save()
+        self._body_path(cr)
+        cr.clip()
+        self._body_path(cr, dy=3)
+        cr.set_source_rgba(*P["highlight"])
+        cr.set_line_width(2)
+        cr.stroke()
+        cr.restore()
+
+    # ------------------------------------------------------------------ draw
     def _draw(self, area, cr, width, height):
-        fg = self._fg()
+        P = self._palette()
         s = self.state
         p = s.pressed
         cr.new_path()
@@ -89,129 +177,216 @@ class PadView(Gtk.DrawingArea):
         cr.translate((width - W * scale) / 2, (height - H * scale) / 2)
         cr.scale(scale, scale)
 
-        # Triggers (L2 / R2) with analogue fill, then L1 / R1
-        for name, x, val in (("l2", 105, s.l2), ("r2", 405, s.r2)):
-            self._rrect(cr, x, 14, 90, 26, 8)
-            self._shape(cr, False, fg)
+        self._draw_triggers(cr, P, s, p)
+        self._draw_body(cr, P)
+        self._draw_touchpad(cr, P, s, p)
+        self._draw_small_buttons(cr, P, p)
+        self._draw_dpad(cr, P, p)
+        self._draw_face(cr, P, p)
+        self._draw_sticks(cr, P, s, p)
+        self._draw_center(cr, P, p)
+        for name, label, x in (("fn_l", "Fn", 205), ("fn_r", "Fn", 395),
+                               ("paddle_l", "Back L", 120), ("paddle_r", "Back R", 480)):
+            if name in p:
+                self._label(cr, P, label, x, 424, 11, True, 1.0)
+
+    def _draw_triggers(self, cr, P, s, p):
+        for name, x, val in (("l2", 98, s.l2), ("r2", 412, s.r2)):
+            w, h, y = 90, 30, 12
+            self._rrect(cr, x, y, w, h, 11)
+            self._part(cr, P, y, y + h)
             if val:
                 cr.save()
-                self._rrect(cr, x, 14, 90, 26, 8)
+                self._rrect(cr, x + 2, y + 2, w - 4, h - 4, 9)
                 cr.clip()
-                cr.rectangle(x, 14, 90 * val / 255, 26)
-                cr.set_source_rgba(*ACCENT, 0.9)
+                fill = (w - 4) * val / 255
+                fx = x + 2 if name == "l2" else x + w - 2 - fill
+                cr.rectangle(fx, y, fill, h)
+                cr.set_source(self._vgrad(y, y + h, _mix(ACCENT, (1, 1, 1), 0.25), ACCENT))
                 cr.fill()
                 cr.restore()
-            self._label(cr, f"{name.upper()}  {val}", x + 45, 32, fg, 11, True, 0.9)
-        for name, x in (("l1", 110), ("r1", 410)):
-            self._rrect(cr, x, 48, 80, 14, 6)
-            self._shape(cr, name in p, fg)
-            self._label(cr, name.upper(), x + 40, 59, fg, 10, True)
+            self._text(cr, f"{name.upper()}  {val}", x + w / 2, y + h / 2, 12,
+                       (*P["fg"], 0.92))
+        for name, x in (("l1", 104), ("r1", 418)):
+            self._rrect(cr, x, 50, 78, 14, 7)
+            self._part(cr, P, 50, 64, name in p)
+            self._text(cr, name.upper(), x + 39, 57, 9.5,
+                       (1, 1, 1, 0.95) if name in p else (*P["fg"], 0.8))
 
-        # Body
-        cr.move_to(150, 70)
-        cr.line_to(450, 70)
-        cr.curve_to(520, 70, 560, 120, 575, 200)
-        cr.curve_to(592, 285, 592, 370, 540, 385)
-        cr.curve_to(500, 395, 472, 345, 440, 305)
-        cr.line_to(160, 305)
-        cr.curve_to(128, 345, 100, 395, 60, 385)
-        cr.curve_to(8, 370, 8, 285, 25, 200)
-        cr.curve_to(40, 120, 80, 70, 150, 70)
-        cr.close_path()
-        cr.set_source_rgba(*fg, 0.05)
-        cr.fill_preserve()
-        cr.set_source_rgba(*fg, 0.35)
-        cr.set_line_width(2)
-        cr.stroke()
-
-        # Light bar: strips along both sides of the touch pad
+    def _draw_touchpad(self, cr, P, s, p):
         tx, ty, tw, th = TOUCHPAD
-        for x in (tx - 9, tx + tw + 3):
-            self._rrect(cr, x, ty + 6, 6, th - 12, 3)
-            cr.set_source_rgba(*self.lightbar, 1.0)
+        # light bar glow around the touch pad, in the current light bar colour
+        for i in range(7, 0, -1):
+            self._rrect(cr, tx - i * 2.2, ty - i * 2.2, tw + i * 4.4, th + i * 4.4, 16 + i * 2)
+            cr.set_source_rgba(*self.lightbar, 0.075)
             cr.fill()
-
-        # Touch pad (+ live touch points)
+        self._rrect(cr, tx - 3, ty - 3, tw + 6, th + 6, 17)
+        cr.set_source_rgba(*self.lightbar, 0.95)
+        cr.set_line_width(2.2)
+        cr.stroke()
+        # pad surface
         self._rrect(cr, tx, ty, tw, th, 14)
-        self._shape(cr, "touchpad" in p, fg, 0.07)
+        if "touchpad" in p:
+            cr.set_source(self._vgrad(ty, ty + th, _mix(ACCENT, (1, 1, 1), 0.3), ACCENT))
+        else:
+            cr.set_source(self._vgrad(ty, ty + th, P["pad_top"], P["pad_bot"]))
+        cr.fill_preserve()
+        cr.set_source_rgba(*P["edge"])
+        cr.set_line_width(1.2)
+        cr.stroke()
         for t in s.touches:
             if t.active:
                 px = tx + tw * min(t.x, s.touch_w) / s.touch_w
                 py = ty + th * min(t.y, s.touch_h) / s.touch_h
-                cr.arc(px, py, 7, 0, 2 * math.pi)
-                cr.set_source_rgba(*ACCENT, 0.85)
+                g = cairo.RadialGradient(px, py, 0, px, py, 13)
+                g.add_color_stop_rgba(0, *ACCENT, 0.95)
+                g.add_color_stop_rgba(0.55, *ACCENT, 0.55)
+                g.add_color_stop_rgba(1, *ACCENT, 0)
+                cr.arc(px, py, 13, 0, 2 * math.pi)
+                cr.set_source(g)
                 cr.fill()
-        self._label(cr, "Touch pad", tx + tw / 2, ty + th / 2 + 4, fg, 11)
+        self._label(cr, P, "Touch pad", tx + tw / 2, ty + th / 2 + 4, 11, alpha=0.55)
+        self._label(cr, P, "Light bar", tx + tw / 2, ty - 14, 9, alpha=0.5)
 
-        # Player indicator (5 LEDs under the touch pad)
+        # player indicator
         for i in range(5):
-            x, y = 268 + i * 16, ty + th + 10
-            if self.player_mask & (1 << i):        # lit: glowing dot, readable on light and dark themes
+            x, y = 268 + i * 16, ty + th + 13
+            if self.player_mask & (1 << i):
                 cr.arc(x, y, 6.5, 0, 2 * math.pi)
-                cr.set_source_rgba(*ACCENT, 0.35)
+                cr.set_source_rgba(*ACCENT, 0.32)
                 cr.fill()
-                cr.arc(x, y, 3.6, 0, 2 * math.pi)
+                cr.arc(x, y, 3.4, 0, 2 * math.pi)
                 cr.set_source_rgba(*ACCENT, 1)
                 cr.fill()
-            else:                                  # off: faint dot
-                cr.arc(x, y, 3.0, 0, 2 * math.pi)
-                cr.set_source_rgba(*fg, 0.18)
+            else:
+                cr.arc(x, y, 2.8, 0, 2 * math.pi)
+                cr.set_source_rgba(*P["fg"], 0.18)
                 cr.fill()
-        self._label(cr, "Player indicator", 300, ty + th + 26, fg, 9, alpha=0.55)
+        self._label(cr, P, "Player indicator", 300, ty + th + 30, 9, alpha=0.5)
 
-        # Create / Options
-        for name, label, x in (("create", "Create", 172), ("options", "Options", 428)):
-            self._rrect(cr, x - 7, 92, 14, 26, 7)
-            self._shape(cr, name in p, fg)
-            self._label(cr, label, x, 134, fg, 10)
+    def _draw_small_buttons(self, cr, P, p):
+        for name, label, x in (("create", "Create", 178), ("options", "Options", 422)):
+            self._rrect(cr, x - 6, 98, 12, 26, 6)
+            self._part(cr, P, 98, 124, name in p)
+            self._label(cr, P, label, x, 140, 10)
 
-        # Directional buttons
+    def _draw_dpad(self, cr, P, p):
         cx, cy = DPAD_C
-        arm, half = 26, 11
-        for name, (dx, dy) in (("up", (0, -1)), ("down", (0, 1)), ("left", (-1, 0)), ("right", (1, 0))):
-            x = cx + dx * (arm - 4) - half
-            y = cy + dy * (arm - 4) - half
-            self._rrect(cr, x, y, half * 2, half * 2, 4)
-            self._shape(cr, name in p, fg)
-        self._label(cr, "Directional buttons", cx, cy + 56, fg, 10)
+        a, r = 30, 12            # arm length from centre, half width
+        # one cross-shaped piece
+        cr.new_path()
+        cr.move_to(cx - r, cy - a)
+        for dx, dy in ((r, -a), (r, -r), (a, -r), (a, r), (r, r), (r, a), (-r, a), (-r, r),
+                       (-a, r), (-a, -r), (-r, -r), (-r, -a)):
+            cr.line_to(cx + dx, cy + dy)
+        cr.close_path()
+        self._part(cr, P, cy - a, cy + a)
+        # pressed arms
+        arms = {"up": (cx - r, cy - a, 2 * r, a - 2), "down": (cx - r, cy + 2, 2 * r, a - 2),
+                "left": (cx - a, cy - r, a - 2, 2 * r), "right": (cx + 2, cy - r, a - 2, 2 * r)}
+        for name, (x, y, w, h) in arms.items():
+            if name in p:
+                self._rrect(cr, x + 1.5, y + 1.5, w - 3, h - 3, 4)
+                cr.set_source(self._vgrad(y, y + h, _mix(ACCENT, (1, 1, 1), 0.2), ACCENT))
+                cr.fill()
+        # arrows
+        for ang, (dx, dy) in ((0, (0, -1)), (math.pi, (0, 1)), (-math.pi / 2, (-1, 0)), (math.pi / 2, (1, 0))):
+            x, y = cx + dx * (a - 9), cy + dy * (a - 9)
+            cr.save()
+            cr.translate(x, y)
+            cr.rotate(ang)
+            cr.move_to(0, -3.5)
+            cr.line_to(3.5, 2.5)
+            cr.line_to(-3.5, 2.5)
+            cr.close_path()
+            cr.restore()
+            cr.set_source_rgba(*P["fg"], 0.35)
+            cr.fill()
+        cr.arc(cx, cy, 5, 0, 2 * math.pi)       # centre dimple
+        cr.set_source_rgba(*P["edge"])
+        cr.set_line_width(1)
+        cr.stroke()
+        self._label(cr, P, "Directional buttons", cx, cy + a + 22, 10)
 
-        # Action buttons
+    def _draw_face(self, cr, P, p):
         cx, cy = FACE_C
         for name, (dx, dy) in (("triangle", (0, -1)), ("cross", (0, 1)), ("square", (-1, 0)), ("circle", (1, 0))):
-            bx, by = cx + dx * 33, cy + dy * 33
-            cr.arc(bx, by, 15, 0, 2 * math.pi)
-            self._shape(cr, name in p, fg, color=FACE_COLORS[name])
-            self._symbol(cr, name, bx, by, (1, 1, 1) if name in p else FACE_COLORS[name])
-        self._label(cr, "Action buttons", cx, cy + 66, fg, 10)
+            bx, by = cx + dx * 34, cy + dy * 34
+            col = FACE_COLORS[name]
+            pressed = name in p
+            # drop shadow
+            cr.arc(bx, by + 2.5, 16, 0, 2 * math.pi)
+            cr.set_source_rgba(*P["shadow"][:3], P["shadow"][3] * 0.8)
+            cr.fill()
+            cr.arc(bx, by, 16, 0, 2 * math.pi)
+            if pressed:
+                g = cairo.RadialGradient(bx - 4, by - 5, 2, bx, by, 18)
+                g.add_color_stop_rgb(0, *_mix(col, (1, 1, 1), 0.35))
+                g.add_color_stop_rgb(1, *col)
+            else:
+                g = cairo.RadialGradient(bx - 5, by - 6, 2, bx, by, 18)
+                g.add_color_stop_rgb(0, *P["part_hi"])
+                g.add_color_stop_rgb(1, *P["part"])
+            cr.set_source(g)
+            cr.fill_preserve()
+            cr.set_source_rgba(*P["edge"])
+            cr.set_line_width(1.2)
+            cr.stroke()
+            self._symbol(cr, name, bx, by, (1, 1, 1) if pressed else col)
+        self._label(cr, P, "Action buttons", cx, cy + 34 + 36, 10)
 
-        # Sticks (position + L3/R3)
+    def _draw_sticks(self, cr, P, s, p):
         for name, (sx, sy), x, y in (("l3", LSTICK, s.lx, s.ly), ("r3", RSTICK, s.rx, s.ry)):
+            # recessed well
+            g = cairo.RadialGradient(sx, sy - 6, STICK_R * 0.3, sx, sy, STICK_R + 2)
+            g.add_color_stop_rgba(0, *P["well"], 0.55)
+            g.add_color_stop_rgba(1, *P["well"], 0.95)
             cr.arc(sx, sy, STICK_R, 0, 2 * math.pi)
-            self._shape(cr, False, fg, 0.06)
-            kx = sx + (x - 128) / 128 * (STICK_R - 12)
-            ky = sy + (y - 128) / 128 * (STICK_R - 12)
-            cr.arc(kx, ky, 16, 0, 2 * math.pi)
-            self._shape(cr, name in p, fg, 0.18)
+            cr.set_source(g)
+            cr.fill_preserve()
+            cr.set_source_rgba(*P["edge"])
+            cr.set_line_width(1.2)
+            cr.stroke()
+            # cap follows the stick
+            kx = sx + (x - 128) / 128 * (STICK_R - 16)
+            ky = sy + (y - 128) / 128 * (STICK_R - 16)
+            cr.arc(kx, ky + 3, 20, 0, 2 * math.pi)
+            cr.set_source_rgba(*P["shadow"][:3], P["shadow"][3])
+            cr.fill()
+            cap = cairo.RadialGradient(kx - 6, ky - 8, 3, kx, ky, 22)
+            cap.add_color_stop_rgb(0, *P["cap_top"])
+            cap.add_color_stop_rgb(1, *P["cap_bot"])
+            cr.arc(kx, ky, 20, 0, 2 * math.pi)
+            cr.set_source(cap)
+            cr.fill_preserve()
+            cr.set_source_rgba(*(ACCENT if name in p else P["edge"][:3]), 1 if name in p else P["edge"][3])
+            cr.set_line_width(2.5 if name in p else 1.2)
+            cr.stroke()
+            # concave top
+            cr.arc(kx, ky, 13, 0, 2 * math.pi)
+            dish = cairo.RadialGradient(kx + 3, ky + 4, 1, kx, ky, 14)
+            dish.add_color_stop_rgba(0, *P["cap_top"], 0.0)
+            dish.add_color_stop_rgba(1, *P["cap_bot"], 0.9)
+            cr.set_source(dish)
+            cr.fill()
             label = "Left stick / L3" if name == "l3" else "Right stick / R3"
-            self._label(cr, label, sx, sy + STICK_R + 16, fg, 10)
+            self._label(cr, P, label, sx, sy + STICK_R + 16, 10)
 
-        # PS button and Mute button
-        cr.arc(300, 238, 13, 0, 2 * math.pi)
-        self._shape(cr, "ps" in p, fg)
-        self._label(cr, "PS", 300, 242, fg, 10, True, 0.9)
+    def _draw_center(self, cr, P, p):
+        cr.arc(300, 246, 13, 0, 2 * math.pi)
+        self._part(cr, P, 233, 259, "ps" in p)
+        self._text(cr, "PS", 300, 246, 10, (1, 1, 1, 0.95) if "ps" in p else (*P["fg"], 0.8))
         if self.is_dualsense:
-            self._rrect(cr, 288, 260, 24, 9, 4.5)
-            self._shape(cr, "mute" in p, fg, color=(0.95, 0.55, 0.2))
-            self._label(cr, "Mute", 300, 283, fg, 9, alpha=0.6)
+            self._rrect(cr, 287, 268, 26, 9, 4.5)
+            self._part(cr, P, 268, 277, "mute" in p, color=(0.95, 0.55, 0.2))
+            self._label(cr, P, "Mute", 300, 291, 9, alpha=0.55)
 
-        # DualSense Edge extras
-        for name, label, x in (("fn_l", "Fn", 195), ("fn_r", "Fn", 405), ("paddle_l", "Back L", 120), ("paddle_r", "Back R", 480)):
-            if name in p:
-                self._label(cr, label, x, 400, fg, 11, True, 1.0)
-
-    def _symbol(self, cr, name, x, y, color):
+    @staticmethod
+    def _symbol(cr, name, x, y, color):
         cr.set_source_rgba(*color, 1)
-        cr.set_line_width(2)
+        cr.set_line_width(2.2)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
         if name == "triangle":
             cr.move_to(x, y - 7)
             cr.line_to(x + 7, y + 5)
