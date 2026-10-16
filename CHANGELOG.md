@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-15
+
 ### Added
 - GNOME top-bar battery indicator (extension `padlink-battery@miguel7coelho.github.io`): battery
   percentage of connected controllers, red when low, ⚡ while charging; installed by `install.sh`
@@ -78,6 +80,7 @@ First public release.
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.2.0...develop
+[0.2.0]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0
