@@ -407,7 +407,8 @@ def test_battery_change_only_updates_player_leds(tmp_path, monkeypatch):
     monkeypatch.setattr(D, "notify", lambda *a, **k: None)
     d = D.Daemon()
     monkeypatch.setattr(d, "_writer", lambda path: W())
-    monkeypatch.setattr(d, "_battery", lambda ctrl: pct["v"])
+    from padlink.battery import BatteryInfo
+    monkeypatch.setattr(d, "_battery", lambda ctrl: BatteryInfo(pct["v"], "Discharging"))
     d.step()                                   # first apply: colour + LEDs
     assert sent and sent[-1][3] & 0x04         # BT: valid_flag1 at byte 3 has the light bar bit
     sent.clear()
@@ -416,3 +417,92 @@ def test_battery_change_only_updates_player_leds(tmp_path, monkeypatch):
     d.step()
     assert len(sent) == 1
     assert sent[0][3] == 0x10                  # only player LEDs flagged, light bar untouched
+
+
+# ---------- low battery: notification at 25% and red light bar ----------
+
+def _daemon_with_battery(tmp_path, monkeypatch, settings_text=None):
+    from padlink import daemon as D
+    from padlink import settings as S
+    from padlink.devices import Controller, BUS_BT
+    bat = tmp_path / "bat"
+    bat.mkdir()
+    sent, notes = [], []
+
+    class W:
+        def write(self, b): sent.append(b)
+        def close(self): pass
+
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6, uniq="aa", battery_path=bat)
+    prof = Profile(name="Desktop", color=(0x30, 0x50, 0xFF), player_leds=1, is_default=True)
+    cfg = tmp_path / "settings.toml"
+    if settings_text:
+        cfg.write_text(settings_text)
+    monkeypatch.setattr(D, "load_battery_settings", lambda: S.load_battery_settings(cfg))
+    monkeypatch.setattr(D, "load_profiles", lambda: [prof])
+    monkeypatch.setattr(D, "find_controllers", lambda: [c])
+    monkeypatch.setattr(D, "detect_games", lambda: [])
+    monkeypatch.setattr(D, "preview_active", lambda: False)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "other_users", lambda h: [])
+    monkeypatch.setattr(D, "notify", lambda title, body, *a: notes.append((title, body)))
+    d = D.Daemon()
+    d.last_reapply = float("inf")
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+
+    def set_battery(pct, status="Discharging"):
+        (bat / "capacity").write_text(f"{pct}\n")
+        (bat / "status").write_text(status + "\n")
+    return d, sent, notes, set_battery
+
+
+def _rgb(report):          # Bluetooth report: light bar colour at bytes 46..48 when flagged
+    return tuple(report[46:49]) if report[3] & 0x04 else None
+
+
+def test_low_battery_turns_light_bar_red_and_notifies(tmp_path, monkeypatch):
+    d, sent, notes, set_battery = _daemon_with_battery(tmp_path, monkeypatch)
+    set_battery(30)
+    d.step()
+    assert _rgb(sent[-1]) == (0x30, 0x50, 0xFF) and notes == []
+    set_battery(25)                         # not *under* 25 yet
+    d.step()
+    assert notes == []
+    sent.clear()
+    set_battery(24)
+    d.step()
+    assert [_rgb(r) for r in sent if _rgb(r)] == [(255, 0, 0)]
+    assert len(notes) == 1 and "battery low" in notes[0][0] and "24%" in notes[0][1]
+    set_battery(23)                         # still low: no repeat notification, no extra writes
+    sent.clear()
+    d.step()
+    assert len(notes) == 1 and not [r for r in sent if _rgb(r)]
+    set_battery(9)
+    d.step()
+    assert len(notes) == 2 and "critical" in notes[1][0]
+
+
+def test_light_bar_restored_when_charging(tmp_path, monkeypatch):
+    d, sent, notes, set_battery = _daemon_with_battery(tmp_path, monkeypatch)
+    set_battery(20)
+    d.step()
+    assert _rgb(sent[-1]) == (255, 0, 0)
+    sent.clear()
+    set_battery(20, "Charging")
+    d.step()
+    assert [_rgb(r) for r in sent if _rgb(r)] == [(0x30, 0x50, 0xFF)]
+
+
+def test_low_battery_settings(tmp_path, monkeypatch):
+    d, sent, notes, set_battery = _daemon_with_battery(
+        tmp_path, monkeypatch, '[battery]\nlow_below = 40\nlow_color = "#ff8800"\n')
+    set_battery(35)
+    d.step()
+    assert _rgb(sent[-1]) == (0xFF, 0x88, 0x00) and len(notes) == 1
+    other = tmp_path / "no-light"
+    other.mkdir()
+    d2, sent2, notes2, set2 = _daemon_with_battery(other, monkeypatch, "[battery]\nlow_light = false\n")
+    set2(9)
+    d2.step()
+    assert all(_rgb(r) != (255, 0, 0) for r in sent2)        # light bar left alone
+    assert [n[0].split()[-1] for n in notes2] == ["critical"]  # 9% is already critical: one urgent notice

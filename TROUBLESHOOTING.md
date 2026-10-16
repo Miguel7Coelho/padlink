@@ -165,10 +165,25 @@ ls /sys/class/power_supply/ | grep -i controller
   older kernels). Update the kernel.
 - Over USB, the controller charges, and the level can read "Full" or "Charging".
 
+### The battery isn't shown in the top bar
+- **Log out and back in once** after installing. On Wayland, GNOME only loads new extensions at login.
+- Check it's enabled: `gnome-extensions info padlink-battery@miguel7coelho.github.io`
+  (or the *Extensions* app). Enable it with
+  `gnome-extensions enable padlink-battery@miguel7coelho.github.io`.
+- If *all* extensions are off: `gsettings set org.gnome.shell disable-user-extensions false`.
+- The indicator hides itself when no controller is connected, and appears within 10 seconds of
+  connecting one.
+- Not on GNOME (KDE, Xfce…)? The extension is GNOME-only; use `padlink list` or the app.
+
+### The light bar turned red
+That's the low-battery warning: the battery is below 25% (or your `low_below` setting). Plug the
+controller in and the profile's colour comes back. To keep notifications but not the red light, set
+`low_light = false` in `~/.config/padlink/settings.toml`.
+
 ### No low-battery notification
 Notifications come from the **background service** (see [Background service](#background-service)),
-and need `notify-send` (package `libnotify`). They are sent once at 20% and once at 10% per
-discharge.
+and need `notify-send` (package `libnotify`). They are sent once below 25% and once below 10% per
+discharge (configurable in `~/.config/padlink/settings.toml`).
 
 ---
 
@@ -249,9 +264,10 @@ systemctl --user restart padlink
 
 - **`Unit padlink.service not found`** → run `./install.sh`, or press **Install** on the Service page.
 - **It doesn't start at login** → `systemctl --user enable padlink`.
-- **The app shows changes the service then overrides** → while you edit in the app the service pauses
-  (for about 6 seconds after the last change). That's by design: the service applies the
-  *active game's* profile, and the editor shows the profile you're editing.
+- **The controller keeps the profile I selected in the app instead of switching for my game**: with
+  *Preview on controller* on, the profile selected in the app's editor stays on the controller (on
+  every tab) while padlink's window is open, and automatic game switching pauses. Close the window,
+  or turn *Preview on controller* off, and the service applies the right profile immediately.
 
 ---
 

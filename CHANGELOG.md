@@ -6,6 +6,32 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-15
+
+### Added
+- GNOME top-bar battery indicator (extension `padlink-battery@miguel7coelho.github.io`): battery
+  percentage of connected controllers, red when low, ⚡ while charging; installed by `install.sh`
+  (`--no-extension` to skip).
+- Low-battery light bar: below 25% the light bar turns red until the controller is charging, then
+  returns to the profile colour.
+- `~/.config/padlink/settings.toml` with `[battery]` `low_below`, `critical_below`, `low_light`, `low_color`.
+- The app's battery indicator turns red when the battery is low.
+- Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
+
+### Fixed
+- Switching from the Profiles page to the Controller tab ended the preview, and a few seconds later
+  the background service put the active game's profile back on the controller. The selected
+  profile now stays on the controller on every tab (and while minimized) as long as padlink is
+  open; closing the window hands control back to the service immediately.
+
+### Changed
+- New controller view: a rendered controller on a transparent background with the live state drawn
+  on top (L2/R2 meters, pressed highlights, stick position markers, touch points, player LEDs, and
+  the touch pad ring in the current light bar colour). Labels outside the controller follow the
+  theme's text colour. The asset is built from `art/controller-realistic-source.png` by
+  `scripts/make-realistic-asset.py`.
+- Low-battery notification now comes below 25% (was at 20%); thresholds are configurable.
+
 ## [0.1.1] - 2026-10-15
 
 ### Added
@@ -54,6 +80,7 @@ First public release.
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.2.0...develop
+[0.2.0]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0

@@ -26,6 +26,21 @@ git switch -c feature/my-change
 git push -u origin feature/my-change      # open a pull request into develop
 ```
 
+### Protected branches
+
+`main` and `develop` are protected by [repository rulesets](.github/rulesets/):
+
+- No direct pushes, force pushes or deletion. Changes arrive through **pull requests** only.
+- Every pull request needs **1 approving review from the code owner** (@Miguel7Coelho, see
+  [CODEOWNERS](.github/CODEOWNERS)). A new push dismisses earlier approvals, and all review
+  threads must be resolved.
+- **CI must pass**: tests on Python 3.11, 3.12 and 3.13, plus ShellCheck, against the latest base branch.
+- Only merge commits are allowed (no squash or rebase), and merged branches are deleted automatically.
+- Release tags `v*` can't be moved or deleted.
+
+The repository admin can bypass these rules (for example to merge a `release/*` branch). The
+rules are applied with `scripts/apply-repo-protection.sh`.
+
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/):

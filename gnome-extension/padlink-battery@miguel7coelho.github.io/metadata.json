@@ -1,0 +1,15 @@
+{
+  "uuid": "padlink-battery@miguel7coelho.github.io",
+  "name": "padlink battery",
+  "description": "DualSense / DualShock 4 battery level in the top bar. Turns red when the battery is low. Part of padlink.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "url": "https://github.com/Miguel7Coelho/padlink",
+  "version-name": "0.2.0"
+}

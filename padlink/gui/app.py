@@ -13,10 +13,11 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from ..battery import read_battery  # noqa: E402
+from ..settings import load_battery_settings  # noqa: E402
 from ..control import apply, resolve_player_leds  # noqa: E402
 from ..devices import Controller, HidrawWriter, find_controllers  # noqa: E402
 from ..inputs import BUTTON_NAMES, InputReader  # noqa: E402
-from ..profiles import Profile  # noqa: E402
+from ..profiles import Profile, clear_preview_lock  # noqa: E402
 from ..xinput import xbox_mode_active  # noqa: E402
 from .padview import PadView  # noqa: E402
 from .profiles_page import ProfilesPage  # noqa: E402
@@ -41,6 +42,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.reader: InputReader | None = None
         self.writer: HidrawWriter | None = None
         self._last_serial = -1
+        self.closing = False
 
         self.toasts = Adw.ToastOverlay()
         self.stack = Adw.ViewStack()
@@ -63,17 +65,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Controller page
         self.pad = PadView()
-        self.readout = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        self.readout = Gtk.Label(xalign=0, wrap=True)
         self.readout.add_css_class("monospace")
         self.readout.add_css_class("dim-label")
-        names = Gtk.Switch(active=True, valign=Gtk.Align.CENTER)
-        names.connect("notify::active", lambda s, _p: (setattr(self.pad, "show_labels", s.get_active()), self.pad.queue_draw()))
-        names_box = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-        names_box.append(Gtk.Label(label="Show names"))
-        names_box.append(names)
         live = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                        margin_top=12, margin_bottom=18, margin_start=18, margin_end=18)
-        live.append(names_box)
         live.append(self.pad)
         live.append(self.readout)
         self.empty = Adw.StatusPage(icon_name="input-gaming-symbolic", title="Connect your controller",
@@ -160,6 +156,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.batt_icon.set_from_icon_name(_battery_icon(b.percent, b.charging))
         self.batt_label.set_label(f"{b.percent}%" if b.percent is not None else "")
         self.batt_icon.set_tooltip_text(f"Battery {b}")
+        low = load_battery_settings().is_low(b.percent, b.charging)
+        for w in (self.batt_label, self.batt_icon):
+            (w.add_css_class if low else w.remove_css_class)("error")    # libadwaita's red
 
     def _frame(self):
         r = self.reader
@@ -234,6 +233,8 @@ class MainWindow(Adw.ApplicationWindow):
             self.service_page.refresh()
 
     def _on_close(self, *_):
+        self.closing = True
+        clear_preview_lock()          # the background service takes over immediately
         if self.reader:
             self.reader.stop()
         if self.writer:
