@@ -13,6 +13,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from ..battery import read_battery  # noqa: E402
+from ..settings import load_battery_settings  # noqa: E402
 from ..control import apply, resolve_player_leds  # noqa: E402
 from ..devices import Controller, HidrawWriter, find_controllers  # noqa: E402
 from ..inputs import BUTTON_NAMES, InputReader  # noqa: E402
@@ -160,6 +161,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.batt_icon.set_from_icon_name(_battery_icon(b.percent, b.charging))
         self.batt_label.set_label(f"{b.percent}%" if b.percent is not None else "")
         self.batt_icon.set_tooltip_text(f"Battery {b}")
+        low = load_battery_settings().is_low(b.percent, b.charging)
+        for w in (self.batt_label, self.batt_icon):
+            (w.add_css_class if low else w.remove_css_class)("error")    # libadwaita's red
 
     def _frame(self):
         r = self.reader

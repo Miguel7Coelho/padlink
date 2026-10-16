@@ -64,7 +64,7 @@ Light bar, Player indicator).
 |---|---|
 | 🎯 **Adaptive triggers** | 17 effects per trigger (resistance, bow, guns, galloping, vibrate, click…), with a live pull meter so you can feel a setting and see it at the same time |
 | 💡 **Lights** | Light bar colour, player indicator (player number or battery bar), Mute button light |
-| 🔋 **Battery** | Level and charging state in the app and CLI; desktop notifications at 20% and 10% |
+| 🔋 **Battery** | Level in the GNOME top bar, the app and the CLI; notification below 25% (and 10%); the light bar turns red until you charge |
 | 🎮 **Per-game profiles** | Detects the running game by Steam AppID, Lutris title or `.exe` name and switches profiles automatically |
 | 🕹️ **Xbox mode** | Games see an Xbox 360 pad (XInput under Proton); the real controller sleeps meanwhile, so games don't see two pads, and rumble is forwarded |
 | 🖥️ **Desktop app** | GTK4 + libadwaita: live controller view, profile editor, service control; light and dark themes |
@@ -119,12 +119,14 @@ and writes a log to `~/.cache/padlink/install.log`. It installs:
 | App launcher | `~/.local/share/applications` |
 | Example profiles (only if you have none) | `~/.config/padlink/profiles` |
 | Background service (enabled and started) | `~/.config/systemd/user/padlink.service` |
+| Top-bar battery indicator (GNOME) | `~/.local/share/gnome-shell/extensions/padlink-battery@miguel7coelho.github.io` |
 | Controller + uinput access | `/etc/udev/rules.d/70-padlink.rules`, `/etc/modules-load.d/padlink-uinput.conf` |
 | Xbox mode helper | `/usr/local/libexec/padlink-hide` + `/etc/sudoers.d/padlink` ([why](SECURITY.md)) |
 
 ```bash
 ./install.sh --verbose             # show every step
 ./install.sh --no-service          # don't enable the background service
+./install.sh --no-extension        # don't install the top-bar battery indicator
 ./install.sh --uninstall           # remove padlink, keep profiles
 ./install.sh --uninstall --purge   # remove padlink and profiles
 ```
@@ -198,6 +200,26 @@ mic_led = "off"                  # "off" | "on" | "pulse"
 
 **Trigger effects:** `off` `rigid` `pulse` `soft` `medium` `hard` `very_hard` `hardest` `full_click`
 `gamecube` `choppy` `resistance` `bow` `galloping` `semi_auto_gun` `auto_gun` `machine` `vibrate`
+
+## Battery
+
+- **Top bar:** a gamepad icon with the controller's battery percentage sits in GNOME's top bar. It
+  turns red when the battery is low, shows ⚡ while charging, and hides when no controller is
+  connected. Click it for details or to open padlink. It appears after you log out and back in
+  once after installing.
+- **Low battery:** below **25%** you get a notification, and the light bar turns **red** until you
+  plug the controller in; then it goes back to your profile's colour. A second, urgent
+  notification comes below 10%.
+
+Change the thresholds or the colour in `~/.config/padlink/settings.toml`:
+
+```toml
+[battery]
+low_below = 25          # notify + red light bar below this percentage
+critical_below = 10     # urgent notification
+low_light = true        # false = notifications only, leave the light bar alone
+low_color = "#ff0000"
+```
 
 ## Xbox mode (XInput)
 
@@ -279,7 +301,7 @@ Bug reports, testing on other distributions and controllers, and pull requests a
       improvement, and the roadmap moves with feedback
 - [ ] Remapping, and gyro to mouse/stick
 - [ ] DSU (Cemuhook) server for emulators
-- [ ] Battery indicator in the GNOME top bar
+- [x] Battery indicator in the GNOME top bar, red light bar when low
 - [ ] Flatpak / RPM / AUR packages
 
 ## License

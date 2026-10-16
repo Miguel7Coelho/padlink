@@ -15,15 +15,14 @@ import signal
 import subprocess
 import time
 
-from .battery import read_battery
+from .battery import BatteryInfo, read_battery
 from .control import apply, resolve_player_leds
 from .devices import HidrawWriter, conflict_hint, find_controllers, other_users
 from .games import detect_games
 from .profiles import Profile, load_profiles, pick_profile, preview_active
+from .settings import BatterySettings, load_battery_settings
 from .xinput import XboxBridge, run_helper, write_state
 
-LOW_BATTERY = 20
-CRITICAL_BATTERY = 10
 REAPPLY_EVERY = 5.0
 
 
@@ -45,6 +44,8 @@ class Daemon:
         self.last_battery: dict[str, int | None] = {}
         self.current: Profile | None = None
         self.bridges: dict[str, XboxBridge] = {}   # hidraw -> running Xbox mode
+        self.battery_settings = BatterySettings()
+        self.low_lit: set[str] = set()                 # controllers showing the low-battery colour
         self.conflicts_seen: dict[str, frozenset[int]] = {}   # hidraw -> pids already reported
         self.last_conflict_check = 0.0
 
@@ -78,7 +79,7 @@ class Daemon:
                     ctrl,
                     left=profile.left if own_triggers else None,
                     right=profile.right if own_triggers else None,
-                    rgb=profile.color,
+                    rgb=self._colour_for(ctrl, profile),
                     player_leds=resolve_player_leds(profile.player_leds, battery_pct),
                     mic_led=profile.mic_led,
                     writer=w,
@@ -98,21 +99,53 @@ class Daemon:
         except OSError as e:
             self.log(f"write failed on {ctrl.hidraw}: {e}")
 
-    def _battery(self, ctrl) -> int | None:
+    def _colour_for(self, ctrl, profile: Profile | None):
+        if ctrl.hidraw in self.low_lit:
+            return self.battery_settings.low_color
+        return profile.color if profile else None
+
+    def _battery(self, ctrl) -> BatteryInfo:
+        """Read the battery and send low / critical notifications once per discharge."""
         info = read_battery(ctrl.battery_path)
+        bs = self.battery_settings
         key = ctrl.uniq or ctrl.hidraw
         pct = info.percent
         if pct is not None and not info.charging:
-            last_level = self.battery_warned.get(key, 101)
-            if pct <= CRITICAL_BATTERY < last_level:
-                notify(f"{ctrl.model} battery critical", f"{pct}% left", "critical")
-                self.battery_warned[key] = CRITICAL_BATTERY
-            elif pct <= LOW_BATTERY < last_level:
-                notify(f"{ctrl.model} battery low", f"{pct}% left")
-                self.battery_warned[key] = LOW_BATTERY
+            last = self.battery_warned.get(key, 101)
+            if pct < bs.critical_below <= last:
+                notify(f"{ctrl.model} battery critical", f"{pct}% left. Charge it soon.", "critical")
+                self.battery_warned[key] = bs.critical_below - 1
+            elif pct < bs.low_below <= last:
+                extra = " The light bar stays red until you charge it." if bs.low_light else ""
+                notify(f"{ctrl.model} battery low", f"{pct}% left.{extra}")
+                self.battery_warned[key] = bs.low_below - 1
         elif info.charging:
             self.battery_warned.pop(key, None)
-        return pct
+        return info
+
+    def _update_low_light(self, ctrl, profile: Profile | None, info: BatteryInfo) -> None:
+        """Red light bar while the battery is low; the profile colour comes back when charging."""
+        bs = self.battery_settings
+        low = bs.low_light and bs.is_low(info.percent, info.charging)
+        lit = ctrl.hidraw in self.low_lit
+        if low == lit:
+            return
+        w = self._writer(ctrl.hidraw)
+        if w is None:
+            return
+        if low:
+            self.low_lit.add(ctrl.hidraw)
+            self.log(f"{ctrl}: battery {info.percent}%, light bar red")
+        else:
+            self.low_lit.discard(ctrl.hidraw)
+            self.log(f"{ctrl}: battery {info}, light bar back to the profile colour")
+        rgb = self._colour_for(ctrl, profile)
+        if rgb is None:
+            return
+        try:
+            apply(ctrl, rgb=rgb, writer=w)
+        except OSError as e:
+            self.log(f"write failed on {ctrl.hidraw}: {e}")
 
     def step(self) -> None:
         profiles = load_profiles()
@@ -149,9 +182,16 @@ class Daemon:
                 key = f"{profile.name}:{profile.path.stat().st_mtime if profile.path else 0}"
             except OSError:
                 key = profile.name
+        self.battery_settings = load_battery_settings()
+        for gone in self.low_lit - live:
+            self.low_lit.discard(gone)
         for c in controllers:
-            pct = self._battery(c)
-            if profile is None or previewing:
+            info = self._battery(c)
+            pct = info.percent
+            if previewing:
+                continue
+            self._update_low_light(c, profile, info)
+            if profile is None:
                 continue
             battery_changed = profile.player_leds == "battery" and self.last_battery.get(c.hidraw) != pct
             self.last_battery[c.hidraw] = pct

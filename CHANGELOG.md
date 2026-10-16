@@ -7,7 +7,17 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- GNOME top-bar battery indicator (extension `padlink-battery@miguel7coelho.github.io`): battery
+  percentage of connected controllers, red when low, ⚡ while charging; installed by `install.sh`
+  (`--no-extension` to skip).
+- Low-battery light bar: below 25% the light bar turns red until the controller is charging, then
+  returns to the profile colour.
+- `~/.config/padlink/settings.toml` with `[battery]` `low_below`, `critical_below`, `low_light`, `low_color`.
+- The app's battery indicator turns red when the battery is low.
 - Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
+
+### Changed
+- Low-battery notification now comes below 25% (was at 20%); thresholds are configurable.
 
 ## [0.1.1] - 2026-10-15
 
