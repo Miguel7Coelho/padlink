@@ -42,11 +42,11 @@ R_SMALL = {"create": (553, 230), "options": (1115, 230)}
 R_TOUCH = (607, 181, 454, 179)             # x, y, w, h of the light bar ring
 R_PLAYER = (758, 796, 834, 872, 910)
 R_PLAYER_Y = 388
-R_MUTE = (832, 465)
+R_MUTE = (832, 532)                        # drawn by padlink, below PS
 R_DPAD = (422, 392)
 R_FACE = {"triangle": (1245, 320), "circle": (1321, 393), "square": (1170, 394), "cross": (1245, 466)}
 R_STICKS = {"l3": (635, 545), "r3": (1032, 545)}
-R_PS = (832, 532)
+R_PS = (832, 465)
 
 
 def _mix(a, b, t):
@@ -160,6 +160,8 @@ class PadView(Gtk.DrawingArea):
         self._draw_pressed(cr, p)
         self._draw_sticks(cr, s, p)
         self._draw_ps(cr, p)
+        if self.is_dualsense:
+            self._draw_mute(cr, p)
 
     def _draw_triggers(self, cr, fg, s):
         pw, ph = R_PILL
@@ -244,9 +246,6 @@ class PadView(Gtk.DrawingArea):
             if name in p:
                 self._rrect(cr, cx - 15, cy - 30, 30, 60, 15)
                 self._glow_fill(cr, ACCENT)
-        if self.is_dualsense and "mute" in p:
-            self._rrect(cr, R_MUTE[0] - 38, R_MUTE[1] - 19, 76, 38, 19)
-            self._glow_fill(cr, (0.95, 0.55, 0.2))
         dx, dy = R_DPAD
         arms = {"up": (dx - 30, dy - 105, 60, 72), "down": (dx - 30, dy + 33, 60, 72),
                 "left": (dx - 105, dy - 30, 72, 60), "right": (dx + 33, dy - 30, 72, 60)}
@@ -284,6 +283,36 @@ class PadView(Gtk.DrawingArea):
             cr.arc(mx, my, 22, 0, 2 * math.pi)
             cr.set_source(g)
             cr.fill()
+
+    def _draw_mute(self, cr, p):
+        mx, my = R_MUTE
+        self._rrect(cr, mx - 38, my - 20, 76, 40, 20)
+        if "mute" in p:
+            self._glow_fill(cr, (0.95, 0.55, 0.2), 0.75)
+        else:
+            g = cairo.LinearGradient(0, my - 20, 0, my + 20)
+            g.add_color_stop_rgb(0, 0.10, 0.105, 0.12)
+            g.add_color_stop_rgb(1, 0.05, 0.055, 0.065)
+            cr.set_source(g)
+            cr.fill_preserve()
+            cr.set_source_rgba(0.82, 0.83, 0.86, 0.95)
+            cr.set_line_width(3.5)
+            cr.stroke()
+        # leader line + label, matching the image's other labels
+        cr.set_source_rgba(1, 1, 1, 0.92)
+        cr.new_path()
+        cr.arc(mx + 38, my, 4, 0, 2 * math.pi)
+        cr.fill()
+        cr.move_to(mx + 38, my)
+        cr.line_to(mx + 54, my)
+        cr.set_line_width(2)
+        cr.stroke()
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(23)
+        ext = cr.text_extents("Mute")
+        cr.move_to(mx + 59 - ext.x_bearing, my - ext.height / 2 - ext.y_bearing)
+        cr.show_text("Mute")
+        cr.new_path()
 
     def _draw_ps(self, cr, p):
         px, py = R_PS                              # the image has no PS button; draw one

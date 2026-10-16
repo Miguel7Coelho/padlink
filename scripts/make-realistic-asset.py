@@ -7,7 +7,8 @@ Steps:
   1. cut the controller out of its flat dark background (the background is perfectly flat,
      the controller's surface never is), remove the soft drop shadow around the grips,
      and feather the edge;
-  2. remove the image's baked yellow light bar ring tint (padlink draws the live colour);
+  2. remove the image's baked yellow light bar ring tint (padlink draws the live colour) and erase
+     its Mute button (padlink draws PS there and Mute below it);
   3. put the labels that float outside the controller into a separate white+alpha layer,
      which the app tints with the theme's text colour, minus the static L2/R2 pills
      (the app draws live ones);
@@ -85,6 +86,23 @@ gray = np.clip(reg[..., 2], 12, 255)
 for c, off in ((0, 0), (1, 1), (2, 4)):
     reg[..., c][warm] = np.clip(gray[warm] + off, 0, 255)
 rgb[y0:y1, x0:x1] = reg
+# 2b. erase the image's Mute button (button, leader line and label): padlink draws PS here and
+#     Mute below it. Only those pixels are replaced (the right stick's ring is protected), filled by
+#     diffusing the surrounding surface into the hole.
+yy2, xx2 = np.mgrid[0:h, 0:w]
+hole = np.zeros((h, w), bool)
+hole[436:496, 786:878] = True                  # button + its shadow
+hole[442:474, 870:958] = True                  # leader line + "Mute"
+hole &= (xx2 - 1032) ** 2 + (yy2 - 545) ** 2 > 110 ** 2
+ys_, xs_ = np.nonzero(hole)
+y0_, y1_, x0_, x1_ = ys_.min() - 2, ys_.max() + 3, xs_.min() - 2, xs_.max() + 3
+sub = rgb[y0_:y1_, x0_:x1_].copy()
+hm = hole[y0_:y1_, x0_:x1_]
+sub[hm] = sub[~hm].mean(axis=0)
+for _ in range(1500):                          # Laplace fill: average of neighbours inside the hole
+    avg = (np.roll(sub, 1, 0) + np.roll(sub, -1, 0) + np.roll(sub, 1, 1) + np.roll(sub, -1, 1)) / 4
+    sub[hm] = avg[hm]
+rgb[y0_:y1_, x0_:x1_] = sub
 body_rgba = np.dstack([rgb.astype(np.uint8), alpha])
 
 # 3. labels outside the body -> alpha from brightness
