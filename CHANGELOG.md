@@ -18,10 +18,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Redesigned controller view with three styles, switchable on the Controller page and remembered:
-  **Realistic** (default: a rendered controller with live highlights, stick markers, L2/R2 meters
-  and the light bar colour drawn on top), **Outline** ( flat, bold lines, round pads around the D-pad and action buttons, ringed
-  sticks) and **Shaded** (single-tone shell with depth and recessed sticks). In both, the touch pad
-  is outlined in the current light bar colour; both adapt to the light and dark themes.
+  - **Realistic** (default): a rendered controller with live highlights, stick markers, L2/R2
+    meters and player LEDs drawn on top.
+  - **Outline**: flat, bold lines, round pads around the D-pad and action buttons, ringed sticks.
+  - **Shaded**: single-tone shell with depth and recessed sticks.
+
+  In every style the touch pad is outlined in the current light bar colour.
 - Low-battery notification now comes below 25% (was at 20%); thresholds are configurable.
 
 ## [0.1.1] - 2026-10-15
