@@ -9,6 +9,24 @@ follows [Semantic Versioning](https://semver.org/).
 ### Added
 - Branch and tag protection: CODEOWNERS, repository rulesets for `main`, `develop` and `v*` tags, and `scripts/apply-repo-protection.sh`.
 
+## [0.1.1] - 2026-10-15
+
+### Added
+- Detects other programs that have the controller open (Wine's `winedevice.exe`, Steam, Proton
+  games) and names them in `padlink list`, after `padlink led` / `padlink player`, and in a desktop
+  notification from the background service. These programs send their own light bar colour and
+  override padlink, which was the cause of "the light bar is not being controlled" reports.
+- Troubleshooting for Wine prefixes that grab the controller (`winebus` `DisableHidraw`).
+
+### Fixed
+- The background service re-sent the whole profile, light bar colour included, every time the
+  battery level changed, undoing colours set with `padlink led`. A battery change now only updates
+  the player indicator.
+
+### Changed
+- DualSense USB output reports are now 63 bytes, the size used by the Linux `hid-playstation`
+  driver (previously 48).
+
 ## [0.1.0] - 2026-10-15
 
 First public release.
@@ -39,5 +57,6 @@ First public release.
   DS4Windows/SDL layout.
 - Touch pad and Mute button are not mapped in Xbox mode.
 
-[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...develop
+[Unreleased]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.1...develop
+[0.1.1]: https://github.com/Miguel7Coelho/padlink/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Miguel7Coelho/padlink/releases/tag/v0.1.0

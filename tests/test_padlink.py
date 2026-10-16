@@ -20,7 +20,7 @@ def test_dualsense_usb_offsets():
     r = dualsense_report(False, rgb=(1, 2, 3), player_leds=0x04,
                          right_trigger=bytes([1, 2, 3, 4, 5, 6, 7, 8]),
                          left_trigger=bytes([9, 10, 11, 12, 13, 14, 15, 16]))
-    assert len(r) == 48 and r[0] == 0x02
+    assert len(r) == 63 and r[0] == 0x02         # full USB report, as hid-playstation sends it
     assert r[45:48] == bytes([1, 2, 3])              # DS4Windows USB: outputReport[45..47]
     assert r[44] == 0x04 | 0x20                      # player LEDs at [44]
     # DS4Windows USB: R2 at [11..17] + frequency [20]; L2 at [22..28] + frequency [31]
@@ -40,6 +40,14 @@ def test_dualsense_bt_offsets_and_crc():
     assert r[23:30] == bytes([9, 10, 11, 12, 13, 14, 15]) and r[32] == 16
     crc = zlib.crc32(b"\xA2" + r[:74]) & 0xFFFFFFFF
     assert int.from_bytes(r[74:78], "little") == crc
+
+
+def test_report_sizes_match_kernel_driver():
+    # Sizes used by Linux hid-playstation; the controllers ignore shorter output reports.
+    assert len(dualsense_report(False, rgb=(1, 2, 3))) == 63      # DS_OUTPUT_REPORT_USB_SIZE
+    assert len(dualsense_report(True, rgb=(1, 2, 3))) == 78       # DS_OUTPUT_REPORT_BT_SIZE
+    assert len(ds4_report(False, rgb=(1, 2, 3))) == 32            # DS4_OUTPUT_REPORT_USB_SIZE
+    assert len(ds4_report(True, rgb=(1, 2, 3))) == 78             # DS4_OUTPUT_REPORT_BT_SIZE
 
 
 def test_unflagged_fields_untouched():
@@ -351,3 +359,60 @@ def test_daemon_toggles_xbox_mode_with_profile(tmp_path, monkeypatch):
     d._sync_xbox([c], desk)            # game closed -> real pad wakes up
     assert [e for e in events if e[0] != "state"] == [("start", "/dev/hidraw3"), ("stop", "/dev/hidraw3")]
     assert events[-1] == ("state", ())
+
+
+# ---------- other programs holding the controller ----------
+
+def test_other_users_finds_wine_and_skips_padlink(tmp_path):
+    from padlink.devices import other_users, conflict_hint
+    dev = tmp_path / "hidraw6"
+    dev.write_text("")
+    proc = tmp_path / "proc"
+
+    def fake(pid, comm, cmd, target):
+        d = proc / str(pid)
+        (d / "fd").mkdir(parents=True)
+        (d / "comm").write_text(comm + "\n")
+        (d / "cmdline").write_bytes(cmd.replace(" ", "\0").encode() + b"\0")
+        (d / "fd" / "73").symlink_to(target)
+
+    fake(200644, "winedevice.exe", "C:\\windows\\system32\\winedevice.exe", dev)
+    fake(416940, "python3", "/usr/bin/python3 -m padlink daemon -v", dev)
+    fake(5000, "firefox", "/usr/lib64/firefox/firefox", tmp_path / "other")
+    users = other_users(str(dev), proc)
+    assert [(u.pid, u.name) for u in users] == [(200644, "winedevice.exe")]
+    assert "winedevice.exe (pid 200644)" in conflict_hint(users) and "Wine" in conflict_hint(users)
+    assert other_users(str(tmp_path / "missing"), proc) == []
+
+
+def test_battery_change_only_updates_player_leds(tmp_path, monkeypatch):
+    """A battery step must not re-send the profile colour (it would undo `padlink led`)."""
+    from padlink import daemon as D
+    from padlink.devices import Controller, BUS_BT
+    sent = []
+
+    class W:
+        def write(self, b): sent.append(b)
+        def close(self): pass
+
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6)
+    prof = Profile(name="Desktop", color=(0x30, 0x50, 0xFF), player_leds="battery", is_default=True)
+    pct = {"v": 55}
+    monkeypatch.setattr(D, "load_profiles", lambda: [prof])
+    monkeypatch.setattr(D, "find_controllers", lambda: [c])
+    monkeypatch.setattr(D, "detect_games", lambda: [])
+    monkeypatch.setattr(D, "preview_active", lambda: False)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "other_users", lambda h: [])
+    monkeypatch.setattr(D, "notify", lambda *a, **k: None)
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+    monkeypatch.setattr(d, "_battery", lambda ctrl: pct["v"])
+    d.step()                                   # first apply: colour + LEDs
+    assert sent and sent[-1][3] & 0x04         # BT: valid_flag1 at byte 3 has the light bar bit
+    sent.clear()
+    pct["v"] = 45
+    d.last_reapply = float("inf")              # no trigger re-send in this step
+    d.step()
+    assert len(sent) == 1
+    assert sent[0][3] == 0x10                  # only player LEDs flagged, light bar untouched
