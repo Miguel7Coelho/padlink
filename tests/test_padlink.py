@@ -506,3 +506,40 @@ def test_low_battery_settings(tmp_path, monkeypatch):
     d2.step()
     assert all(_rgb(r) != (255, 0, 0) for r in sent2)        # light bar left alone
     assert [n[0].split()[-1] for n in notes2] == ["critical"]  # 9% is already critical: one urgent notice
+
+
+# ---------- turning the controller off ----------
+
+def test_power_off(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from padlink import devices as Dv
+    from padlink.devices import Controller, BUS_BT, BUS_USB, power_off
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="Attempting to disconnect from D4:2F:4B:05:14:DD\nSuccessful disconnected\n", stderr="")
+
+    bt = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6, uniq="d4:2f:4b:05:14:dd")
+    usb = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_USB, pid=0x0CE6, uniq="")
+
+    monkeypatch.setattr(Dv.shutil, "which", lambda name: "/usr/bin/" + name if name == "bluetoothctl" else None)
+    ok, msg = power_off(bt, run=fake_run)
+    assert ok and "turned off" in msg and calls[-1] == ["bluetoothctl", "disconnect", "d4:2f:4b:05:14:dd"]
+
+    ok, msg = power_off(usb, run=fake_run)
+    assert not ok and "Bluetooth" in msg
+
+    bad = Controller(sys_path=tmp_path, hidraw="/dev/hidraw6", bus=BUS_BT, pid=0x0CE6, uniq="d4:2f; rm -rf /")
+    n = len(calls)
+    ok, msg = power_off(bad, run=fake_run)
+    assert not ok and len(calls) == n            # never reaches a command
+
+    fail = lambda cmd, **kw: SimpleNamespace(returncode=1, stdout="Failed to disconnect: org.bluez.Error.NotConnected", stderr="")
+    ok, msg = power_off(bt, run=fail)
+    assert not ok and "NotConnected" in msg
+
+    # D-Bus fallback when bluetoothctl is missing
+    monkeypatch.setattr(Dv.shutil, "which", lambda name: "/usr/bin/busctl" if name == "busctl" else None)
+    ok, msg = power_off(bt, run=fake_run)
+    assert ok and calls[-1][:3] == ["busctl", "call", "org.bluez"] and calls[-1][3] == "/org/bluez/hci0/dev_D4_2F_4B_05_14_DD"

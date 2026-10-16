@@ -10,6 +10,9 @@ The kernel's hid-playstation driver binds the pad and creates, under one HID dev
 from __future__ import annotations
 
 import os
+import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -167,6 +170,43 @@ def conflict_hint(users: list[OtherUser]) -> str:
     elif any("steam" in u.name.lower() for u in users):
         hint += " (Steam Input: turn off its light bar control)"
     return hint
+
+
+_MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
+
+
+def power_off(ctrl: Controller, run=subprocess.run) -> tuple[bool, str]:
+    """Turn a Bluetooth controller off by dropping its connection (it powers down by itself).
+
+    There's no way to turn it back on from the PC: a switched-off controller has its radio off,
+    so only its PS button wakes it. Over USB the cable keeps it powered, so this doesn't apply.
+    """
+    if not ctrl.is_bluetooth:
+        return False, "Only works over Bluetooth (USB keeps the controller powered)."
+    mac = ctrl.uniq.strip()
+    if not _MAC_RE.match(mac):
+        return False, f"Unknown Bluetooth address {mac!r}."
+    if shutil.which("bluetoothctl"):
+        try:
+            r = run(["bluetoothctl", "disconnect", mac], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return False, f"bluetoothctl failed: {e}"
+        out = (r.stdout + r.stderr).strip()
+        if r.returncode == 0 and "fail" not in out.lower():
+            return True, f"{ctrl.model} turned off. Press PS to turn it on again."
+        return False, out.splitlines()[-1] if out else f"bluetoothctl exited with {r.returncode}"
+    if shutil.which("busctl"):
+        # BlueZ over D-Bus; the adapter is almost always hci0
+        path = "/org/bluez/hci0/dev_" + mac.upper().replace(":", "_")
+        try:
+            r = run(["busctl", "call", "org.bluez", path, "org.bluez.Device1", "Disconnect"],
+                    capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return False, f"busctl failed: {e}"
+        if r.returncode == 0:
+            return True, f"{ctrl.model} turned off. Press PS to turn it on again."
+        return False, (r.stderr or r.stdout).strip() or f"busctl exited with {r.returncode}"
+    return False, "Neither bluetoothctl nor busctl is installed (package bluez)."
 
 
 class HidrawWriter:
