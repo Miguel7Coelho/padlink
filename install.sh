@@ -6,6 +6,7 @@
 #   ./install.sh --uninstall --purge   remove padlink and your profiles
 #   ./install.sh --no-service  don't enable the background service
 #   ./install.sh --verbose     show every command instead of just a summary
+#   ./install.sh --no-extension  don't install the GNOME top-bar battery indicator
 #
 # What it installs:
 #   system packages   PyGObject + GTK4 + libadwaita (the app), python-evdev (Xbox mode), acl
@@ -14,6 +15,7 @@
 #   ~/.local/share/applications   app launcher
 #   ~/.config/padlink/profiles    example profiles (only if you have none yet)
 #   ~/.config/systemd/user/padlink.service   background service, enabled and started
+#   ~/.local/share/gnome-shell/extensions/padlink-battery@…   top-bar battery indicator (GNOME only)
 #   /etc/udev/rules.d/70-padlink.rules       your user may talk to Sony pads + create virtual pads (uinput)
 #   /etc/modules-load.d/padlink-uinput.conf  load uinput at boot
 #   /usr/local/libexec/padlink-hide          root helper that puts the real pad to sleep in Xbox mode
@@ -21,15 +23,17 @@
 set -euo pipefail
 
 APP_ID="io.github.miguel7coelho.padlink"
+EXT_UUID="padlink-battery@miguel7coelho.github.io"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERBOSE=0; UNINSTALL=0; PURGE=0; SERVICE=1
+VERBOSE=0; UNINSTALL=0; PURGE=0; SERVICE=1; EXTENSION=1
 for a in "$@"; do
   case "$a" in
     --verbose|-v) VERBOSE=1 ;;
     --uninstall)  UNINSTALL=1 ;;
     --purge)      PURGE=1 ;;
     --no-service) SERVICE=0 ;;
-    -h|--help)    sed -n '2,24p' "$0"; exit 0 ;;
+    --no-extension) EXTENSION=0 ;;
+    -h|--help)    sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 1 ;;
   esac
 done
@@ -79,6 +83,25 @@ sudo_once() {
   trap 'kill $KEEPALIVE 2>/dev/null || true' EXIT
 }
 
+# Add/remove the extension in GNOME's enabled list (takes effect at next login on Wayland,
+# where GNOME can't load newly installed extensions until the session restarts).
+set_extension_enabled() {
+  command -v gsettings >/dev/null || return 0
+  local current new
+  current=$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null) || return 0
+  new=$(python3 - "$current" "$EXT_UUID" "$1" <<'PY'
+import ast, sys
+cur, uuid, on = sys.argv[1], sys.argv[2], sys.argv[3] == "true"
+cur = cur.replace("@as ", "", 1)
+items = [x for x in ast.literal_eval(cur) if x != uuid]
+if on:
+    items.append(uuid)
+print(repr(items))
+PY
+) || return 0
+  run gsettings set org.gnome.shell enabled-extensions "$new"
+}
+
 # ============================================================================================
 uninstall() {
   echo "Removing padlink…"
@@ -90,6 +113,9 @@ uninstall() {
   rm -rf "$APP_DIR" "$BIN_DIR/padlink" "$BIN_DIR/padlink-gui" \
          "$DATA_HOME/applications/$APP_ID.desktop" "$UNIT_DIR/padlink.service" \
          "$UNIT_DIR/default.target.wants/padlink.service"
+  try gnome-extensions disable "$EXT_UUID"
+  set_extension_enabled false
+  rm -rf "$DATA_HOME/gnome-shell/extensions/$EXT_UUID"
   try systemctl --user daemon-reload
   run "${SUDO[@]}" rm -f /etc/udev/rules.d/70-padlink.rules /etc/modules-load.d/padlink-uinput.conf \
       "$HELPER" /etc/sudoers.d/padlink
@@ -150,7 +176,7 @@ install_app() {
 
   rm -rf "$APP_DIR.new"
   mkdir -p "$APP_DIR.new"
-  cp -r "$SRC/padlink" "$SRC/data" "$SRC/packaging" "$SRC/README.md" "$APP_DIR.new/"
+  cp -r "$SRC/padlink" "$SRC/data" "$SRC/packaging" "$SRC/gnome-extension" "$SRC/README.md" "$APP_DIR.new/"
   cp "$SRC/install.sh" "$APP_DIR.new/"
   find "$APP_DIR.new" -name __pycache__ -prune -exec rm -rf {} +
   rm -rf "$APP_DIR"
@@ -210,6 +236,20 @@ EOF
   fi
 }
 
+install_extension() {
+  if [[ $EXTENSION -eq 0 ]]; then say "skipped (--no-extension)"; return; fi
+  if ! command -v gnome-shell >/dev/null; then say "not GNOME; skipped"; return; fi
+  local dest="$DATA_HOME/gnome-shell/extensions/$EXT_UUID"
+  rm -rf "$dest"; mkdir -p "$dest"
+  cp "$SRC/gnome-extension/$EXT_UUID/"* "$dest/"
+  set_extension_enabled true
+  if gnome-extensions enable "$EXT_UUID" >> "$LOG" 2>&1; then
+    say "battery indicator enabled in the top bar"
+  else
+    say "battery indicator installed; it appears in the top bar after you log out and back in"
+  fi
+}
+
 check() {
   PYTHONPATH="$APP_DIR" /usr/bin/python3 -c 'import padlink.cli' >> "$LOG" 2>&1 || fail "padlink doesn't start; see the log."
   if PYTHONPATH="$APP_DIR" /usr/bin/python3 -c 'import gi; gi.require_version("Gtk","4.0"); gi.require_version("Adw","1"); from gi.repository import Gtk, Adw' >> "$LOG" 2>&1; then
@@ -230,6 +270,7 @@ step "System packages";            install_packages
 step "Controller access + helper"; install_system
 step "Program";                    install_app
 step "Background service";         install_service
+step "Top-bar battery indicator";  install_extension
 step "Checking";                   check
 echo "✓ padlink installed. Open it from the app grid, or run: padlink gui"
 echo "  If your controller was already connected, reconnect it once."
