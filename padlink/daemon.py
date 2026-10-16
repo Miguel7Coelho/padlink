@@ -23,6 +23,7 @@ from .profiles import Profile, load_profiles, pick_profile, preview_active, prev
 from .settings import BatterySettings, load_battery_settings
 from .xinput import XboxBridge, run_helper, write_state
 
+XBOX_RETRY_EVERY = 30.0      # seconds between attempts after Xbox mode failed to start
 REAPPLY_EVERY = 5.0
 
 
@@ -44,6 +45,7 @@ class Daemon:
         self.last_battery: dict[str, int | None] = {}
         self.current: Profile | None = None
         self.bridges: dict[str, XboxBridge] = {}   # hidraw -> running Xbox mode
+        self.xbox_failed: dict[str, tuple[str, float]] = {}   # hidraw -> (error, when) of the last failed start
         self.battery_settings = BatterySettings()
         self.low_lit: set[str] = set()                 # controllers showing the low-battery colour
         self.conflicts_seen: dict[str, frozenset[int]] = {}   # hidraw -> pids already reported
@@ -229,8 +231,13 @@ class Daemon:
     def _sync_xbox(self, controllers, profile: Profile | None) -> None:
         """Xbox mode on exactly when the active profile wants it; the real pad sleeps meanwhile."""
         want = bool(profile and profile.xbox_mode)
+        if not want:
+            self.xbox_failed.clear()             # a new attempt later may notify again
         for c in controllers:
             running = c.hidraw in self.bridges
+            failed = self.xbox_failed.get(c.hidraw)
+            if want and not running and failed and time.monotonic() - failed[1] < XBOX_RETRY_EVERY:
+                continue                         # don't retry (and notify) every couple of seconds
             if want and not running:
                 w = self._writer(c.hidraw)          # open hidraw *before* it gets hidden
                 if w is None:
@@ -241,8 +248,11 @@ class Daemon:
                 except Exception as e:
                     self.log(f"Xbox mode failed for {c}: {e!r}")
                     bridge.stop()
-                    notify("padlink", f"Xbox mode failed: {e}", "critical")
+                    if failed is None or failed[0] != str(e):     # tell the user once per error
+                        notify("padlink", f"Xbox mode failed: {e}", "critical")
+                    self.xbox_failed[c.hidraw] = (str(e), time.monotonic())
                     continue
+                self.xbox_failed.pop(c.hidraw, None)
                 self.bridges[c.hidraw] = bridge
                 if bridge.warning:
                     notify("padlink", bridge.warning, "normal")

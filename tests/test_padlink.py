@@ -361,6 +361,41 @@ def test_daemon_toggles_xbox_mode_with_profile(tmp_path, monkeypatch):
     assert events[-1] == ("state", ())
 
 
+def test_xbox_failure_notifies_once_and_backs_off(tmp_path, monkeypatch):
+    from padlink import daemon as D
+    from padlink.devices import Controller, BUS_BT
+    starts, notes = [], []
+
+    class FailingBridge:
+        def __init__(self, ctrl, write, log=None):
+            self.warning = None
+        def start(self):
+            starts.append(1)
+            raise PermissionError("[Errno 13] Permission denied: '/dev/input/event22'")
+        def stop(self): pass
+
+    class W:
+        def write(self, b): pass
+        def close(self): pass
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(D, "XboxBridge", FailingBridge)
+    monkeypatch.setattr(D, "write_state", lambda a: None)
+    monkeypatch.setattr(D, "notify", lambda *a, **k: notes.append(a))
+    monkeypatch.setattr(D.time, "monotonic", lambda: clock["t"])
+    d = D.Daemon()
+    monkeypatch.setattr(d, "_writer", lambda path: W())
+    c = Controller(sys_path=tmp_path, hidraw="/dev/hidraw3", bus=BUS_BT, pid=0x0CE6)
+    game = Profile(name="Game", xbox_mode=True)
+    for _ in range(10):                         # 20 s of daemon steps
+        d._sync_xbox([c], game)
+        clock["t"] += 2
+    assert len(starts) == 1 and len(notes) == 1
+    clock["t"] += 30
+    d._sync_xbox([c], game)                     # retried later, same error: no new notification
+    assert len(starts) == 2 and len(notes) == 1
+
+
 def test_preview_xbox_switch_drives_xbox_mode(tmp_path, monkeypatch):
     """The app's preview decides Xbox mode, so it can be tried without starting the game."""
     from padlink import daemon as D

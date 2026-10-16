@@ -21,6 +21,8 @@ follows [Semantic Versioning](https://semver.org/).
   touch pad nodes are root-only by default. The udev rule now gives the logged-in user access to all
   of the controller's input nodes (run `install.sh` again), and Xbox mode no longer fails if one of
   those extra nodes can't be grabbed.
+- When Xbox mode couldn't start, the background service retried and showed the same error
+  notification every 2 seconds. It now notifies once per error and retries every 30 seconds.
 - The app kept sending the light bar and triggers of the previewed profile while Xbox mode was on
   (it opens the controller before Xbox mode hides it).
 
