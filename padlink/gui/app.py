@@ -93,18 +93,20 @@ class MainWindow(Adw.ApplicationWindow):
         self.readout.add_css_class("dim-label")
         names = Gtk.Switch(active=True, valign=Gtk.Align.CENTER)
         names.connect("notify::active", lambda s, _p: (setattr(self.pad, "show_labels", s.get_active()), self.pad.queue_draw()))
-        styles = ["outline", "shaded"]
-        style_dd = Gtk.DropDown(model=Gtk.StringList.new(["Outline", "Shaded"]), valign=Gtk.Align.CENTER,
+        styles = ["realistic", "outline", "shaded"]
+        style_dd = Gtk.DropDown(model=Gtk.StringList.new(["Realistic", "Outline", "Shaded"]), valign=Gtk.Align.CENTER,
                                 tooltip_text="Controller drawing style")
-        saved = _load_ui().get("controller_style", "outline")
-        self.pad.style = saved if saved in styles else "outline"
+        saved = _load_ui().get("controller_style", "realistic")
+        self.pad.style = saved if saved in styles else "realistic"
         style_dd.set_selected(styles.index(self.pad.style))
 
         def on_style(dd, _p):
             self.pad.style = styles[dd.get_selected()]
+            names.set_sensitive(self.pad.style != "realistic")     # labels are part of the image
             self.pad.queue_draw()
             _save_ui(controller_style=self.pad.style)
         style_dd.connect("notify::selected", on_style)
+        names.set_sensitive(self.pad.style != "realistic")
         names_box = Gtk.Box(spacing=8, halign=Gtk.Align.END)
         names_box.append(Gtk.Label(label="Style"))
         names_box.append(style_dd)

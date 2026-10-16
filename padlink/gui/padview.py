@@ -7,6 +7,7 @@ and a glow around the touch pad in the light bar's current colour.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import gi
 
@@ -46,7 +47,8 @@ class PadView(Gtk.DrawingArea):
         self.player_mask = 0
         self.show_labels = True
         self.is_dualsense = True
-        self.style = "outline"            # "outline" (flat, bold lines) or "shaded"
+        self.style = "realistic"          # "realistic" (image), "outline" or "shaded"
+        self._photo = None
         self.set_content_width(W)
         self.set_content_height(H)
         self.set_hexpand(True)
@@ -178,6 +180,10 @@ class PadView(Gtk.DrawingArea):
         cr.translate((width - W * scale) / 2, (height - H * scale) / 2)
         cr.scale(scale, scale)
 
+        if self.style == "realistic" and self._load_photo():
+            cr.identity_matrix()
+            self._draw_realistic(cr, width, height, s, p)
+            return
         if self.style == "outline":
             self._draw_outline(cr, P, s, p)
             return
@@ -590,6 +596,193 @@ class PadView(Gtk.DrawingArea):
                                ("paddle_l", "Back L", 120), ("paddle_r", "Back R", 480)):
             if name in p:
                 self._label(cr, P, label, x, 428, 11, True, 1.0)
+
+    # ================================================================== realistic style
+    # A rendered controller image (assets/controller-realistic.png, 1672x940) with the live state
+    # drawn on top. Coordinates below are in image pixels.
+    PHOTO = Path(__file__).with_name("assets") / "controller-realistic.png"
+    R_BG = (13 / 255, 15 / 255, 19 / 255)
+    R_L2, R_R2 = (400, 62), (1266, 62)
+    R_PILL = (176, 46)
+    R_BUMPER = {"l1": (400, 152), "r1": (1266, 152)}
+    R_SMALL = {"create": (553, 230), "options": (1115, 230)}
+    R_TOUCH = (607, 181, 454, 179)             # x, y, w, h of the light bar ring
+    R_PLAYER = (758, 796, 834, 872, 910)
+    R_PLAYER_Y = 388
+    R_MUTE = (832, 465)
+    R_DPAD = (422, 392)
+    R_FACE = {"triangle": (1245, 320), "circle": (1321, 393), "square": (1170, 394), "cross": (1245, 466)}
+    R_STICKS = {"l3": (635, 545), "r3": (1032, 545)}
+    R_PS = (832, 532)
+
+    def _load_photo(self):
+        if self._photo is None:
+            try:
+                self._photo = cairo.ImageSurface.create_from_png(str(self.PHOTO))
+            except (OSError, cairo.Error):
+                self._photo = False
+        return bool(self._photo)
+
+    def _draw_realistic(self, cr, width, height, s, p):
+        img = self._photo
+        iw, ih = img.get_width(), img.get_height()
+        scale = min(width / iw, height / ih)
+        cr.translate((width - iw * scale) / 2, (height - ih * scale) / 2)
+        cr.scale(scale, scale)
+        self._rrect(cr, 0, 0, iw, ih, 28)
+        cr.clip()
+        cr.set_source_surface(img, 0, 0)
+        cr.paint()
+
+        def glow_fill(color, alpha=0.55):
+            cr.set_source_rgba(*color, alpha)
+            cr.fill_preserve()
+            cr.set_source_rgba(*color, 0.95)
+            cr.set_line_width(4)
+            cr.stroke()
+
+        # ---- L2 / R2: cover the static pills, draw live meters
+        pw, ph = self.R_PILL
+        for name, (cx, cy), val in (("l2", self.R_L2, s.l2), ("r2", self.R_R2, s.r2)):
+            x, y = cx - pw / 2, cy - ph / 2
+            self._rrect(cr, x - 6, y - 6, pw + 12, ph + 12, ph / 2 + 6)
+            cr.set_source_rgb(*self.R_BG)
+            cr.fill()
+            self._rrect(cr, x, y, pw, ph, ph / 2)
+            cr.set_source_rgba(1, 1, 1, 0.04)
+            cr.fill_preserve()
+            cr.set_source_rgba(1, 1, 1, 0.9)
+            cr.set_line_width(3)
+            cr.stroke()
+            if val:
+                cr.save()
+                self._rrect(cr, x + 5, y + 5, pw - 10, ph - 10, ph / 2 - 5)
+                cr.clip()
+                w = (pw - 10) * val / 255
+                cr.rectangle(x + 5 if name == "l2" else x + pw - 5 - w, y, w, ph)
+                cr.set_source_rgba(*ACCENT, 0.95)
+                cr.fill()
+                cr.restore()
+            self._text(cr, f"{name.upper()}  {val}", cx, cy, 26, (1, 1, 1, 0.95), bold=False)
+
+        # ---- light bar: replace the static yellow ring with the live colour
+        tx, ty, tw, th = self.R_TOUCH
+        self._rrect(cr, tx, ty, tw, th, 34)
+        cr.set_source_rgb(*self.R_BG)
+        cr.set_line_width(26)
+        cr.stroke()
+        for i in range(6, 0, -1):
+            self._rrect(cr, tx - i * 3, ty - i * 3, tw + i * 6, th + i * 6, 34 + i * 3)
+            cr.set_source_rgba(*self.lightbar, 0.05)
+            cr.set_line_width(6)
+            cr.stroke()
+        self._rrect(cr, tx + 2, ty + 2, tw - 4, th - 4, 32)
+        cr.set_source_rgba(*self.lightbar, 1)
+        cr.set_line_width(7)
+        cr.stroke()
+        if "touchpad" in p:
+            self._rrect(cr, tx + 8, ty + 8, tw - 16, th - 16, 26)
+            cr.set_source_rgba(*ACCENT, 0.25)
+            cr.fill()
+        for t in s.touches:
+            if t.active:
+                px = tx + 10 + (tw - 20) * min(t.x, s.touch_w) / s.touch_w
+                py = ty + 10 + (th - 20) * min(t.y, s.touch_h) / s.touch_h
+                g = cairo.RadialGradient(px, py, 0, px, py, 26)
+                g.add_color_stop_rgba(0, *ACCENT, 0.95)
+                g.add_color_stop_rgba(0.5, *ACCENT, 0.55)
+                g.add_color_stop_rgba(1, *ACCENT, 0)
+                cr.new_path()
+                cr.arc(px, py, 26, 0, 2 * math.pi)
+                cr.set_source(g)
+                cr.fill()
+
+        # ---- player indicator
+        for i, x in enumerate(self.R_PLAYER):
+            y = self.R_PLAYER_Y
+            cr.new_path()
+            cr.arc(x, y, 11, 0, 2 * math.pi)
+            cr.set_source_rgb(*self.R_BG)
+            cr.fill()
+            cr.new_path()
+            if self.player_mask & (1 << i):
+                cr.arc(x, y, 14, 0, 2 * math.pi)
+                cr.set_source_rgba(*ACCENT, 0.3)
+                cr.fill()
+                cr.arc(x, y, 7.5, 0, 2 * math.pi)
+                cr.set_source_rgba(*_mix(ACCENT, (1, 1, 1), 0.2), 1)
+                cr.fill()
+            else:
+                cr.arc(x, y, 7, 0, 2 * math.pi)
+                cr.set_source_rgba(0.32, 0.33, 0.37, 1)
+                cr.fill()
+
+        # ---- pressed overlays
+        for name, (cx, cy) in self.R_BUMPER.items():
+            if name in p:
+                cr.new_path()
+                cr.save()
+                cr.translate(cx, cy)
+                cr.scale(125, 32)
+                cr.arc(0, 0, 1, 0, 2 * math.pi)
+                cr.restore()
+                glow_fill(ACCENT, 0.5)
+        for name, (cx, cy) in self.R_SMALL.items():
+            if name in p:
+                self._rrect(cr, cx - 15, cy - 30, 30, 60, 15)
+                glow_fill(ACCENT)
+        if "mute" in p:
+            self._rrect(cr, self.R_MUTE[0] - 38, self.R_MUTE[1] - 19, 76, 38, 19)
+            glow_fill((0.95, 0.55, 0.2))
+        dx, dy = self.R_DPAD
+        arms = {"up": (dx - 30, dy - 105, 60, 72), "down": (dx - 30, dy + 33, 60, 72),
+                "left": (dx - 105, dy - 30, 72, 60), "right": (dx + 33, dy - 30, 72, 60)}
+        for name, (x, y, w, h) in arms.items():
+            if name in p:
+                self._rrect(cr, x, y, w, h, 14)
+                glow_fill(ACCENT)
+        for name, (cx, cy) in self.R_FACE.items():
+            if name in p:
+                cr.new_path()
+                cr.arc(cx, cy, 38, 0, 2 * math.pi)
+                glow_fill(FACE_COLORS[name], 0.6)
+                cr.save()
+                cr.translate(cx, cy)
+                cr.scale(2.6, 2.6)
+                self._symbol(cr, name, 0, 0, (1, 1, 1))
+                cr.restore()
+        for name, (cx, cy), x, y in (("l3", self.R_STICKS["l3"], s.lx, s.ly), ("r3", self.R_STICKS["r3"], s.rx, s.ry)):
+            if name in p:
+                cr.new_path()
+                cr.arc(cx, cy, 80, 0, 2 * math.pi)
+                cr.set_source_rgba(*ACCENT, 0.95)
+                cr.set_line_width(7)
+                cr.stroke()
+            # stick position: a glowing marker that moves across the cap
+            mx = cx + (x - 128) / 128 * 58
+            my = cy + (y - 128) / 128 * 58
+            g = cairo.RadialGradient(mx, my, 0, mx, my, 22)
+            g.add_color_stop_rgba(0, *ACCENT, 1)
+            g.add_color_stop_rgba(0.45, *ACCENT, 0.6)
+            g.add_color_stop_rgba(1, *ACCENT, 0)
+            cr.new_path()
+            cr.arc(mx, my, 22, 0, 2 * math.pi)
+            cr.set_source(g)
+            cr.fill()
+
+        # ---- PS button (not in the image)
+        px, py = self.R_PS
+        cr.new_path()
+        cr.arc(px, py, 24, 0, 2 * math.pi)
+        if "ps" in p:
+            glow_fill(ACCENT, 0.8)
+        else:
+            cr.set_source_rgba(1, 1, 1, 0.06)
+            cr.fill_preserve()
+            cr.set_source_rgba(1, 1, 1, 0.55)
+            cr.set_line_width(3)
+            cr.stroke()
+        self._text(cr, "PS", px, py, 18, (1, 1, 1, 0.9))
 
     @staticmethod
     def _symbol(cr, name, x, y, color):

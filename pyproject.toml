@@ -18,3 +18,6 @@ padlink-gui = "padlink.gui.app:main"
 
 [tool.setuptools]
 packages = ["padlink", "padlink.gui"]
+
+[tool.setuptools.package-data]
+"padlink.gui" = ["assets/*.png"]
