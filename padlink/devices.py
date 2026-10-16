@@ -106,6 +106,69 @@ def find_controllers(hid_root: Path = HID_ROOT) -> list[Controller]:
     return found
 
 
+PROC = Path("/proc")
+
+
+@dataclass
+class OtherUser:
+    pid: int
+    name: str
+
+    def __str__(self) -> str:
+        return f"{self.name} (pid {self.pid})"
+
+
+def other_users(hidraw: str, proc: Path = PROC) -> list[OtherUser]:
+    """Programs other than padlink that have this controller's hidraw node open.
+
+    Programs that drive the controller directly (Steam, Wine's winedevice.exe, games through
+    Proton) send their own light bar colour and override padlink. Only your own processes
+    are visible without root, which covers all of these.
+    """
+    try:
+        target = os.stat(hidraw).st_rdev
+    except OSError:
+        return []
+    me = os.getpid()
+    found: list[OtherUser] = []
+    for pid_dir in proc.iterdir():
+        if not pid_dir.name.isdigit() or int(pid_dir.name) == me:
+            continue
+        try:
+            fds = list((pid_dir / "fd").iterdir())
+        except OSError:
+            continue
+        hit = False
+        for fd in fds:
+            try:
+                if os.readlink(fd) == hidraw or (target and os.stat(fd).st_rdev == target):
+                    hit = True
+                    break
+            except OSError:
+                continue
+        if not hit:
+            continue
+        try:
+            cmd = (pid_dir / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            name = (pid_dir / "comm").read_text().strip()
+        except OSError:
+            continue
+        if "padlink" in cmd:          # padlink's own service / app
+            continue
+        found.append(OtherUser(int(pid_dir.name), name))
+    return found
+
+
+def conflict_hint(users: list[OtherUser]) -> str:
+    names = ", ".join(str(u) for u in users)
+    hint = f"also open in {names}. It may override the light bar."
+    if any("winedevice" in u.name or "wine" in u.name for u in users):
+        hint += " (Wine: see TROUBLESHOOTING.md → \"Light bar and LEDs\")"
+    elif any("steam" in u.name.lower() for u in users):
+        hint += " (Steam Input: turn off its light bar control)"
+    return hint
+
+
 class HidrawWriter:
     """Keeps /dev/hidrawN open for writing output reports."""
 
