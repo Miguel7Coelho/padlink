@@ -20,7 +20,7 @@ import sys
 
 from .battery import read_battery
 from .control import apply, resolve_player_leds
-from .devices import Controller, find_controllers
+from .devices import Controller, conflict_hint, find_controllers, other_users
 from .games import detect_games
 from .profiles import PROFILE_DIR, load_profiles, parse_color, pick_profile
 from .triggers import EFFECTS, TriggerSetting
@@ -38,12 +38,20 @@ def _controllers(args) -> list[Controller]:
     return ctrls
 
 
+def _warn_conflicts(c: Controller) -> None:
+    users = other_users(c.hidraw)
+    if users:
+        print(f"warning: {c.model} is {conflict_hint(users)}", file=sys.stderr)
+
+
 def _each(args, **kw) -> None:
     for c in _controllers(args):
         try:
             apply(c, **kw)
         except PermissionError:
             sys.exit(f"Permission denied on {c.hidraw}. Install packaging/70-padlink.rules (see README).")
+        if "rgb" in kw or "player_leds" in kw:
+            _warn_conflicts(c)
 
 
 def cmd_list(args) -> None:
@@ -52,6 +60,9 @@ def cmd_list(args) -> None:
         print("No controllers found.")
     for i, c in enumerate(ctrls):
         print(f"#{i}  {c}   battery: {read_battery(c.battery_path)}")
+        users = other_users(c.hidraw)
+        if users:
+            print(f"    ⚠ {conflict_hint(users)}")
 
 
 def cmd_games(args) -> None:
@@ -83,6 +94,7 @@ def cmd_player(args) -> None:
     for c in _controllers(args):
         mask = resolve_player_leds(args.value, read_battery(c.battery_path).percent)
         apply(c, player_leds=mask)
+        _warn_conflicts(c)
 
 
 def cmd_apply(args) -> None:

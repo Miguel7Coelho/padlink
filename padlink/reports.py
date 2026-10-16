@@ -12,7 +12,7 @@ DualSense layout (common block, offsets relative to its start):
   10..16  right trigger (mode + 6 params), 19 right trigger frequency
   21..27  left trigger,                    30 left trigger frequency
   38 valid_flag2   41 lightbar_setup   42 LED brightness   43 player LEDs   44..46 RGB
-USB: report 0x02, common block at byte 1, 48 bytes long.
+USB: report 0x02, common block at byte 1, 63 bytes long (the full report; shorter ones are ignored).
 BT:  report 0x31, byte 1 = 0x02, common block at byte 2, 78 bytes long, CRC32 in the last 4.
      (same as DS4Windows and SDL; CRC = crc32(0xA2 + report[0:74]), little-endian)
 """
@@ -22,7 +22,9 @@ import zlib
 
 from .triggers import OFF
 
-DS_USB_LEN = 48
+# The DualSense silently drops output reports shorter than its declared size. Linux's hid-playstation
+# uses 63 (DS_OUTPUT_REPORT_USB_SIZE); DS4Windows uses the device's OutputReportByteLength.
+DS_USB_LEN = 63
 DS_BT_LEN = 78
 DS4_USB_LEN = 32
 DS4_BT_LEN = 78
